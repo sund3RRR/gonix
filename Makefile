@@ -6,5 +6,11 @@ NIX_DEVELOP = nix develop $(NIX_DEV_SHELL) --command
 
 .PHONY: test
 
+deps:
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+
 test:
 	$(NIX_DEVELOP) go test -v -cover -race -count=1 ./...
+
+lint:
+	$(NIX_DEVELOP) golangci-lint run
