@@ -4,7 +4,7 @@ export NIX_CONFIG
 NIX_DEV_SHELL ?= github:sund3RRR/nix-go-bindings
 NIX_DEVELOP = nix develop $(NIX_DEV_SHELL) --command
 
-.PHONY: test
+.PHONY: deps test lint
 
 deps:
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
