@@ -22,7 +22,7 @@ func newTestContext(t *testing.T) *raw.NixCContext {
 	return ctx
 }
 
-func TestNewNixError(t *testing.T) {
+func TestFromContext(t *testing.T) {
 	tests := []struct {
 		name             string
 		setup            func(t *testing.T) *raw.NixCContext
@@ -93,7 +93,7 @@ func TestNewNixError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := tt.setup(t)
-			got := status.NewNixError(ctx)
+			got := status.FromContext(ctx)
 			if tt.checkContextCode {
 				if got := raw.ErrCode(ctx); got != tt.wantContextCode {
 					t.Errorf("ErrCode after NewNixError = %v, want %v", got, tt.wantContextCode)

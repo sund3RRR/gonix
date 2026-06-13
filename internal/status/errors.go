@@ -53,7 +53,7 @@ func (e NixError) Error() string {
 	return fmt.Sprintf("%s (%d): message=%s", e.Code, e.Code, e.Message)
 }
 
-// NewNixError copies the pending error from ctx into a NixError and clears ctx.
+// FromContext copies the pending error from ctx into a NixError and clears ctx.
 //
 // The returned error does not own or borrow ctx. Passing nil, or a context with
 // ErrorCodeOK, returns nil. A non-OK context is cleared after its error data has
@@ -61,14 +61,14 @@ func (e NixError) Error() string {
 //
 // The Nix C API functions that read structured error details accept two
 // contexts: one context to report failures that happen while reading, and one
-// context to inspect. NewNixError uses a temporary background context for the
+// context to inspect. FromContext uses a temporary background context for the
 // former so it does not overwrite the original error before it has been copied.
 //
 // For ErrorCodeNix, Name and Info are read only when the context appears to
 // contain a structured Nix exception. Some low-level code can set the
 // NIX_ERR_NIX_ERROR code without attaching detailed exception data, and asking
 // Nix for missing detailed info may be unsafe.
-func NewNixError(ctx *raw.NixCContext) *NixError {
+func FromContext(ctx *raw.NixCContext) *NixError {
 	if ctx == nil {
 		return nil
 	}
