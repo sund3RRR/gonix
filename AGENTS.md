@@ -37,8 +37,8 @@ The core pieces are:
 Use Nix for the development shell, tests, and builds. The repository should be
 usable through:
 
-- `nix develop`
-- `nix develop -c go test ./...`
+- `nix develop github:sund3RRR/nix-go-bindings`
+- `nix develop github:sund3RRR/nix-go-bindings --command go test ./...`
 - `nix build`
 
 Use `nix-go-bindings` as the low-level dependency. Raw generated types from that
@@ -179,12 +179,23 @@ Keep unsupported callback-based APIs out of v1 unless a safe `cgo.Handle`
 registry and lifetime model is explicitly designed. This includes custom
 primops, external value callback descriptors, and arbitrary GC finalizers.
 
+## Documentation Rules
+
+All public Go entities must have concise, informative godoc comments.
+
+Comments should explain what the entity represents or does from the SDK user's
+point of view. Keep them short, but include important ownership, lifecycle,
+error, or Nix-semantics details when those details affect correct use.
+
+After adding or changing public API documentation, verify the rendered output
+with `go doc` for the affected package and symbols.
+
 ## Testing Rules
 
 Tests should run inside the Nix development environment:
 
 ```sh
-nix develop -c go test ./...
+nix develop github:sund3RRR/nix-go-bindings --command go test ./...
 ```
 
 Also keep these checks healthy:
@@ -208,6 +219,13 @@ Tests should cover:
 - Isolated temporary stores where possible.
 
 Public API tests should import and use `gonix`, not raw `nix-go-bindings`.
+
+After making changes, always run:
+
+```sh
+make test
+make lint
+```
 
 ## Commit Style
 
