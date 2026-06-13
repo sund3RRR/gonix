@@ -1,4 +1,4 @@
-package gonix
+package status
 
 import raw "github.com/sund3RRR/nix-go-bindings"
 

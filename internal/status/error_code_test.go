@@ -1,50 +1,50 @@
-package gonix_test
+package status_test
 
 import (
 	"testing"
 
-	"github.com/sund3RRR/gonix"
+	"github.com/sund3RRR/gonix/internal/status"
 )
 
 func TestErrorCode_String(t *testing.T) {
 	tests := []struct {
 		name string
-		code gonix.ErrorCode
+		code status.ErrorCode
 		want string
 	}{
 		{
 			name: "ok",
-			code: gonix.ErrorCodeOK,
+			code: status.ErrorCodeOK,
 			want: "NIX_OK",
 		},
 		{
 			name: "unknown",
-			code: gonix.ErrorCodeUnknown,
+			code: status.ErrorCodeUnknown,
 			want: "NIX_ERR_UNKNOWN",
 		},
 		{
 			name: "overflow",
-			code: gonix.ErrorCodeOverflow,
+			code: status.ErrorCodeOverflow,
 			want: "NIX_ERR_OVERFLOW",
 		},
 		{
 			name: "key",
-			code: gonix.ErrorCodeKey,
+			code: status.ErrorCodeKey,
 			want: "NIX_ERR_KEY",
 		},
 		{
 			name: "nix error",
-			code: gonix.ErrorCodeNix,
+			code: status.ErrorCodeNix,
 			want: "NIX_ERR_NIX_ERROR",
 		},
 		{
 			name: "recoverable",
-			code: gonix.ErrorCodeRecoverable,
+			code: status.ErrorCodeRecoverable,
 			want: "NIX_ERR_RECOVERABLE",
 		},
 		{
 			name: "unrecognized code",
-			code: gonix.ErrorCode(12345),
+			code: status.ErrorCode(12345),
 			want: "NIX_ERR_UNKNOWN",
 		},
 	}

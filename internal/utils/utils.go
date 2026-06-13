@@ -1,4 +1,4 @@
-package gonix
+package utils
 
 import (
 	"unsafe"
@@ -6,7 +6,8 @@ import (
 	raw "github.com/sund3RRR/nix-go-bindings"
 )
 
-func takeCString(ptr *byte) string {
+// TakeCString copies a Nix-owned C string into Go and releases the original.
+func TakeCString(ptr *byte) string {
 	if ptr == nil {
 		return ""
 	}

@@ -1,10 +1,10 @@
-package gonix_test
+package status_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/sund3RRR/gonix"
+	"github.com/sund3RRR/gonix/internal/status"
 	raw "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -26,7 +26,7 @@ func TestNewNixError(t *testing.T) {
 	tests := []struct {
 		name             string
 		setup            func(t *testing.T) *raw.NixCContext
-		want             *gonix.NixError
+		want             *status.NixError
 		wantMsgSubstring string
 		wantContextCode  raw.NixErr
 		checkContextCode bool
@@ -63,8 +63,8 @@ func TestNewNixError(t *testing.T) {
 
 				return ctx
 			},
-			want: &gonix.NixError{
-				Code: gonix.ErrorCodeUnknown,
+			want: &status.NixError{
+				Code: status.ErrorCodeUnknown,
 			},
 			wantMsgSubstring: "gonix test error",
 			wantContextCode:  raw.NixOk,
@@ -82,8 +82,8 @@ func TestNewNixError(t *testing.T) {
 
 				return ctx
 			},
-			want: &gonix.NixError{
-				Code: gonix.ErrorCodeNix,
+			want: &status.NixError{
+				Code: status.ErrorCodeNix,
 			},
 			wantMsgSubstring: "gonix nix error",
 			wantContextCode:  raw.NixOk,
@@ -93,7 +93,7 @@ func TestNewNixError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := tt.setup(t)
-			got := gonix.NewNixError(ctx)
+			got := status.NewNixError(ctx)
 			if tt.checkContextCode {
 				if got := raw.ErrCode(ctx); got != tt.wantContextCode {
 					t.Errorf("ErrCode after NewNixError = %v, want %v", got, tt.wantContextCode)
