@@ -2,6 +2,9 @@ package gonix
 
 import "github.com/sund3RRR/gonix/internal/status"
 
+// ErrClosed is returned when an operation is attempted after a wrapper has been closed.
+var ErrClosed = status.ErrClosed
+
 // Error describes a Nix failure captured by gonix.
 //
 // It is a stable, Go-native snapshot of a Nix context error: the status code,
