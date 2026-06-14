@@ -166,8 +166,12 @@ Core methods:
 - paths: `ParsePath`, `PathFromHash`, `RealPath`, `IsValidPath`;
 - derivations: `DerivationFromJSON`, `DerivationFromPath`, `AddDerivation`;
 - realization: `Realise`;
-- closure: `Closure`, `CopyClosure`;
-- copying: `CopyPathTo`.
+- closure: `Closure(path, opts...)`, `CopyClosure`;
+- copying: `CopyPathTo(dst, path, opts...)`.
+
+`Closure` options expose Nix's closure traversal flags: reverse traversal,
+including outputs, and including derivers. `CopyPathTo` options expose repair
+and signature-check flags.
 
 `Store` creates many `storepath.Path` and `store.Derivation` wrappers. Returned
 wrappers own their raw resources and must be closed independently unless they
@@ -296,10 +300,22 @@ type Closure struct {
 
 `Store.Realise` converts raw realization results into `[]Realization`, clones
 paths as owned `storepath.Path` wrappers, and frees the raw result handle before
-returning.
+returning. Each `Realization` owns its `Path` and provides `Close() error`.
 
 `Store.Closure` converts raw `StorePathArray` handles into owned paths and frees
-the raw array before returning.
+the raw array before returning. `Closure.Close()` releases every owned path and
+is idempotent.
+
+Closure traversal is configured with:
+
+- `WithClosureReverse`;
+- `WithClosureOutputs`;
+- `WithClosureDerivers`.
+
+Path copying is configured with:
+
+- `WithCopyRepair`;
+- `WithCopyCheckSignatures`.
 
 ### Flakes
 
