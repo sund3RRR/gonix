@@ -60,7 +60,7 @@ type Config struct {
 func (c Config) Params() (map[string]string, error) {
 	data, err := json.Marshal(c)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -68,7 +68,7 @@ func (c Config) Params() (map[string]string, error) {
 
 	var values map[string]any
 	if err := decoder.Decode(&values); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode config values: %w", err)
 	}
 
 	params := make(map[string]string, len(values))
