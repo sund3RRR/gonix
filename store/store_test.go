@@ -2,35 +2,178 @@
 package store
 
 import (
-	"reflect"
+	"errors"
+	"strings"
 	"testing"
 
+	"github.com/sund3RRR/gonix/internal/status"
+	"github.com/sund3RRR/gonix/storepath"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
+const (
+	testZeroStorePath    = "/nix/store/00000000000000000000000000000000-demo"
+	testNonZeroStorePath = "/nix/store/11111111111111111111111111111111-source"
+	testZeroHashPart     = "00000000000000000000000000000000"
+)
+
+const testStoreDerivationJSON = `{
+  "name": "gonix-test",
+  "version": 4,
+  "outputs": {
+    "out": {
+      "path": "awjawq2kj29m8cg6cmdpyksrjnmlk7jp-gonix-test"
+    }
+  },
+  "inputs": {
+    "srcs": [],
+    "drvs": {}
+  },
+  "system": "x86_64-linux",
+  "builder": "/bin/sh",
+  "args": [],
+  "env": {
+    "builder": "/bin/sh",
+    "name": "gonix-test",
+    "out": "/nix/store/awjawq2kj29m8cg6cmdpyksrjnmlk7jp-gonix-test",
+    "system": "x86_64-linux"
+  }
+}`
+
+func newStoreTestContext(t *testing.T) *nix.NixCContext {
+	t.Helper()
+
+	ctx := nix.CContextCreate()
+	if ctx == nil {
+		t.Fatal("CContextCreate returned nil")
+	}
+	t.Cleanup(func() {
+		nix.CContextFree(ctx)
+	})
+
+	if code := nix.LibstoreInitNoLoadConfig(ctx); status.ErrorCode(code) != status.ErrorCodeOK {
+		t.Fatalf("LibstoreInitNoLoadConfig() = %v: %v", code, status.FromContext(ctx))
+	}
+
+	return ctx
+}
+
+func newStoreTestStore(t *testing.T) *Store {
+	t.Helper()
+
+	s, err := New(newStoreTestContext(t), "dummy://")
+	if err != nil {
+		t.Fatalf("New(dummy://) error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := s.Close(); err != nil {
+			t.Fatalf("Store.Close() error = %v", err)
+		}
+	})
+
+	return s
+}
+
+func newStoreTestPath(t *testing.T, s *Store, rawPath string) *storepath.Path {
+	t.Helper()
+
+	path, err := s.ParsePath(rawPath)
+	if err != nil {
+		t.Fatalf("Store.ParsePath(%q) error = %v", rawPath, err)
+	}
+	t.Cleanup(func() {
+		if err := path.Close(); err != nil {
+			t.Fatalf("Path.Close() error = %v", err)
+		}
+	})
+
+	return path
+}
+
+func newStoreTestDerivation(t *testing.T, s *Store) *Derivation {
+	t.Helper()
+
+	d, err := s.DerivationFromJSON([]byte(testStoreDerivationJSON))
+	if err != nil {
+		t.Fatalf("Store.DerivationFromJSON() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := d.Close(); err != nil {
+			t.Fatalf("Derivation.Close() error = %v", err)
+		}
+	})
+
+	return d
+}
+
+func requireStoreClosedError(t *testing.T, err error) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatal("error = nil, want status.ErrClosed")
+	}
+	if !errors.Is(err, status.ErrClosed) {
+		t.Fatalf("error = %v, want errors.Is(..., status.ErrClosed)", err)
+	}
+}
+
 func TestNew(t *testing.T) {
-	type args struct {
-		ctx  *nix.NixCContext
-		uri  string
-		opts []Option
-	}
 	tests := []struct {
-		name    string
-		args    args
-		want    *Store
-		wantErr bool
+		name      string
+		uri       string
+		opts      []Option
+		wantErr   bool
+		assertion func(t *testing.T, s *Store)
 	}{
-		// TODO: Add test cases.
+		{
+			name: "opens_dummy_store",
+			uri:  "dummy://",
+			assertion: func(t *testing.T, s *Store) {
+				t.Helper()
+
+				uri, err := s.URI()
+				if err != nil {
+					t.Fatalf("Store.URI() error = %v", err)
+				}
+				if strings.TrimSpace(uri) == "" {
+					t.Fatal("Store.URI() returned empty URI")
+				}
+			},
+		},
+		{
+			name: "opens_with_options",
+			uri:  "dummy://",
+			opts: []Option{WithStoreDir(DefaultDir), WithReadOnly(true)},
+		},
+		{
+			name:    "invalid_uri",
+			uri:     "gonix-test-invalid-store://",
+			wantErr: true,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := New(tt.args.ctx, tt.args.uri, tt.args.opts...)
+			got, err := New(newStoreTestContext(t), tt.uri, tt.opts...)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("New() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("New() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				if got != nil {
+					t.Fatalf("New() = %v, want nil", got)
+				}
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("New() = %v, want %v", got, tt.want)
+			t.Cleanup(func() {
+				if err := got.Close(); err != nil {
+					t.Fatalf("Store.Close() error = %v", err)
+				}
+			})
+			if got == nil {
+				t.Fatal("New() = nil, want store")
+			}
+			if tt.assertion != nil {
+				tt.assertion(t, got)
 			}
 		})
 	}

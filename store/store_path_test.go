@@ -1,241 +1,387 @@
 package store
 
 import (
-	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/sund3RRR/gonix/storepath"
-	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
 func TestStore_URI(t *testing.T) {
-	type fields struct {
-		ctx *nix.NixCContext
-		ptr *nix.Store
-	}
 	tests := []struct {
 		name    string
-		fields  fields
-		want    string
+		setup   func(t *testing.T) *Store
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "open_store",
+			setup: func(t *testing.T) *Store {
+				t.Helper()
+				return newStoreTestStore(t)
+			},
+		},
+		{
+			name: "closed_store",
+			setup: func(t *testing.T) *Store {
+				t.Helper()
+				s := newStoreTestStore(t)
+				if err := s.Close(); err != nil {
+					t.Fatalf("Store.Close() error = %v", err)
+				}
+				return s
+			},
+			wantErr: true,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Store{
-				ctx: tt.fields.ctx,
-				ptr: tt.fields.ptr,
-			}
-			got, err := s.URI()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Store.URI() error = %v, wantErr %v", err, tt.wantErr)
+			got, err := tt.setup(t).URI()
+			if tt.wantErr {
+				requireStoreClosedError(t, err)
 				return
 			}
-			if got != tt.want {
-				t.Errorf("Store.URI() = %v, want %v", got, tt.want)
+			if err != nil {
+				t.Fatalf("Store.URI() error = %v", err)
+			}
+			if strings.TrimSpace(got) == "" {
+				t.Fatal("Store.URI() returned empty URI")
 			}
 		})
 	}
 }
 
 func TestStore_StoreDir(t *testing.T) {
-	type fields struct {
-		ctx *nix.NixCContext
-		ptr *nix.Store
-	}
 	tests := []struct {
 		name    string
-		fields  fields
+		setup   func(t *testing.T) *Store
 		want    string
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "open_store",
+			setup: func(t *testing.T) *Store {
+				t.Helper()
+				return newStoreTestStore(t)
+			},
+			want: DefaultDir,
+		},
+		{
+			name: "closed_store",
+			setup: func(t *testing.T) *Store {
+				t.Helper()
+				s := newStoreTestStore(t)
+				if err := s.Close(); err != nil {
+					t.Fatalf("Store.Close() error = %v", err)
+				}
+				return s
+			},
+			wantErr: true,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Store{
-				ctx: tt.fields.ctx,
-				ptr: tt.fields.ptr,
-			}
-			got, err := s.StoreDir()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Store.StoreDir() error = %v, wantErr %v", err, tt.wantErr)
+			got, err := tt.setup(t).StoreDir()
+			if tt.wantErr {
+				requireStoreClosedError(t, err)
 				return
 			}
+			if err != nil {
+				t.Fatalf("Store.StoreDir() error = %v", err)
+			}
 			if got != tt.want {
-				t.Errorf("Store.StoreDir() = %v, want %v", got, tt.want)
+				t.Fatalf("Store.StoreDir() = %q, want %q", got, tt.want)
 			}
 		})
 	}
 }
 
 func TestStore_Version(t *testing.T) {
-	type fields struct {
-		ctx *nix.NixCContext
-		ptr *nix.Store
-	}
 	tests := []struct {
 		name    string
-		fields  fields
-		want    string
+		setup   func(t *testing.T) *Store
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "open_store",
+			setup: func(t *testing.T) *Store {
+				t.Helper()
+				return newStoreTestStore(t)
+			},
+		},
+		{
+			name: "closed_store",
+			setup: func(t *testing.T) *Store {
+				t.Helper()
+				s := newStoreTestStore(t)
+				if err := s.Close(); err != nil {
+					t.Fatalf("Store.Close() error = %v", err)
+				}
+				return s
+			},
+			wantErr: true,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Store{
-				ctx: tt.fields.ctx,
-				ptr: tt.fields.ptr,
-			}
-			got, err := s.Version()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Store.Version() error = %v, wantErr %v", err, tt.wantErr)
+			_, err := tt.setup(t).Version()
+			if tt.wantErr {
+				requireStoreClosedError(t, err)
 				return
 			}
-			if got != tt.want {
-				t.Errorf("Store.Version() = %v, want %v", got, tt.want)
+			if err != nil {
+				t.Fatalf("Store.Version() error = %v", err)
 			}
 		})
 	}
 }
 
 func TestStore_ParsePath(t *testing.T) {
-	type fields struct {
-		ctx *nix.NixCContext
-		ptr *nix.Store
-	}
-	type args struct {
-		path string
-	}
 	tests := []struct {
 		name    string
-		fields  fields
-		args    args
-		want    *storepath.Path
+		path    string
+		setup   func(t *testing.T) *Store
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "valid_path",
+			path: testZeroStorePath,
+			setup: func(t *testing.T) *Store {
+				t.Helper()
+				return newStoreTestStore(t)
+			},
+		},
+		{
+			name: "invalid_path",
+			path: "/not-a-store-path",
+			setup: func(t *testing.T) *Store {
+				t.Helper()
+				return newStoreTestStore(t)
+			},
+			wantErr: true,
+		},
+		{
+			name: "closed_store",
+			path: testZeroStorePath,
+			setup: func(t *testing.T) *Store {
+				t.Helper()
+				s := newStoreTestStore(t)
+				if err := s.Close(); err != nil {
+					t.Fatalf("Store.Close() error = %v", err)
+				}
+				return s
+			},
+			wantErr: true,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Store{
-				ctx: tt.fields.ctx,
-				ptr: tt.fields.ptr,
-			}
-			got, err := s.ParsePath(tt.args.path)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Store.ParsePath() error = %v, wantErr %v", err, tt.wantErr)
+			got, err := tt.setup(t).ParsePath(tt.path)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("Store.ParsePath() error = nil, want error")
+				}
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Store.ParsePath() = %v, want %v", got, tt.want)
+			if err != nil {
+				t.Fatalf("Store.ParsePath() error = %v", err)
+			}
+			t.Cleanup(func() {
+				if err := got.Close(); err != nil {
+					t.Fatalf("Path.Close() error = %v", err)
+				}
+			})
+			if got == nil {
+				t.Fatal("Store.ParsePath() = nil, want path")
 			}
 		})
 	}
 }
 
 func TestStore_PathFromHash(t *testing.T) {
-	type fields struct {
-		ctx *nix.NixCContext
-		ptr *nix.Store
-	}
-	type args struct {
-		hashPart []byte
-	}
 	tests := []struct {
 		name    string
-		fields  fields
-		args    args
-		want    *storepath.Path
+		hash    []byte
+		setup   func(t *testing.T) *Store
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "missing_hash_in_dummy_store",
+			hash: []byte(testZeroHashPart),
+			setup: func(t *testing.T) *Store {
+				t.Helper()
+				return newStoreTestStore(t)
+			},
+			wantErr: true,
+		},
+		{
+			name: "closed_store",
+			hash: []byte(testZeroHashPart),
+			setup: func(t *testing.T) *Store {
+				t.Helper()
+				s := newStoreTestStore(t)
+				if err := s.Close(); err != nil {
+					t.Fatalf("Store.Close() error = %v", err)
+				}
+				return s
+			},
+			wantErr: true,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Store{
-				ctx: tt.fields.ctx,
-				ptr: tt.fields.ptr,
-			}
-			got, err := s.PathFromHash(tt.args.hashPart)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Store.PathFromHash() error = %v, wantErr %v", err, tt.wantErr)
+			got, err := tt.setup(t).PathFromHash(tt.hash)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("Store.PathFromHash() error = nil, want error")
+				}
+				if got != nil {
+					t.Fatalf("Store.PathFromHash() = %v, want nil", got)
+				}
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Store.PathFromHash() = %v, want %v", got, tt.want)
+			if err != nil {
+				t.Fatalf("Store.PathFromHash() error = %v", err)
 			}
+			t.Cleanup(func() {
+				if err := got.Close(); err != nil {
+					t.Fatalf("Path.Close() error = %v", err)
+				}
+			})
 		})
 	}
 }
 
 func TestStore_RealPath(t *testing.T) {
-	type fields struct {
-		ctx *nix.NixCContext
-		ptr *nix.Store
-	}
-	type args struct {
-		path *storepath.Path
-	}
 	tests := []struct {
 		name    string
-		fields  fields
-		args    args
-		want    string
+		setup   func(t *testing.T) (*Store, string)
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "valid_path",
+			setup: func(t *testing.T) (*Store, string) {
+				t.Helper()
+				return newStoreTestStore(t), testZeroStorePath
+			},
+		},
+		{
+			name: "closed_store",
+			setup: func(t *testing.T) (*Store, string) {
+				t.Helper()
+				s := newStoreTestStore(t)
+				_ = newStoreTestPath(t, s, testZeroStorePath)
+				if err := s.Close(); err != nil {
+					t.Fatalf("Store.Close() error = %v", err)
+				}
+				return s, testZeroStorePath
+			},
+			wantErr: true,
+		},
+		{
+			name: "closed_path",
+			setup: func(t *testing.T) (*Store, string) {
+				t.Helper()
+				return newStoreTestStore(t), ""
+			},
+			wantErr: true,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Store{
-				ctx: tt.fields.ctx,
-				ptr: tt.fields.ptr,
+			s, rawPath := tt.setup(t)
+			var path *storepath.Path
+			if rawPath == testZeroStorePath && s.ptr == nil {
+				openStore := newStoreTestStore(t)
+				path = newStoreTestPath(t, openStore, testZeroStorePath)
+			} else {
+				path = newStoreTestPath(t, s, testZeroStorePath)
 			}
-			got, err := s.RealPath(tt.args.path)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Store.RealPath() error = %v, wantErr %v", err, tt.wantErr)
+			if rawPath == "" {
+				if err := path.Close(); err != nil {
+					t.Fatalf("Path.Close() error = %v", err)
+				}
+			}
+			got, err := s.RealPath(path)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("Store.RealPath() error = nil, want error")
+				}
 				return
 			}
-			if got != tt.want {
-				t.Errorf("Store.RealPath() = %v, want %v", got, tt.want)
+			if err != nil {
+				t.Fatalf("Store.RealPath() error = %v", err)
+			}
+			if got != rawPath {
+				t.Fatalf("Store.RealPath() = %q, want %q", got, rawPath)
 			}
 		})
 	}
 }
 
 func TestStore_IsValidPath(t *testing.T) {
-	type fields struct {
-		ctx *nix.NixCContext
-		ptr *nix.Store
-	}
-	type args struct {
-		path *storepath.Path
-	}
 	tests := []struct {
 		name    string
-		fields  fields
-		args    args
+		setup   func(t *testing.T) (*Store, *storepath.Path)
 		want    bool
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "dummy_store_arbitrary_path_is_not_valid",
+			setup: func(t *testing.T) (*Store, *storepath.Path) {
+				t.Helper()
+				s := newStoreTestStore(t)
+				return s, newStoreTestPath(t, s, testZeroStorePath)
+			},
+		},
+		{
+			name: "closed_store",
+			setup: func(t *testing.T) (*Store, *storepath.Path) {
+				t.Helper()
+				s := newStoreTestStore(t)
+				path := newStoreTestPath(t, s, testZeroStorePath)
+				if err := s.Close(); err != nil {
+					t.Fatalf("Store.Close() error = %v", err)
+				}
+				return s, path
+			},
+			wantErr: true,
+		},
+		{
+			name: "closed_path",
+			setup: func(t *testing.T) (*Store, *storepath.Path) {
+				t.Helper()
+				s := newStoreTestStore(t)
+				path := newStoreTestPath(t, s, testZeroStorePath)
+				if err := path.Close(); err != nil {
+					t.Fatalf("Path.Close() error = %v", err)
+				}
+				return s, path
+			},
+			wantErr: true,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Store{
-				ctx: tt.fields.ctx,
-				ptr: tt.fields.ptr,
-			}
-			got, err := s.IsValidPath(tt.args.path)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Store.IsValidPath() error = %v, wantErr %v", err, tt.wantErr)
+			s, path := tt.setup(t)
+			got, err := s.IsValidPath(path)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("Store.IsValidPath() error = nil, want error")
+				}
 				return
 			}
+			if err != nil {
+				t.Fatalf("Store.IsValidPath() error = %v", err)
+			}
 			if got != tt.want {
-				t.Errorf("Store.IsValidPath() = %v, want %v", got, tt.want)
+				t.Fatalf("Store.IsValidPath() = %v, want %v", got, tt.want)
 			}
 		})
 	}

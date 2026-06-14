@@ -1,114 +1,243 @@
 package store
 
 import (
-	"reflect"
+	"encoding/json"
+	"errors"
 	"testing"
 
+	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/storepath"
-	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
 func TestStore_DerivationFromJSON(t *testing.T) {
-	type fields struct {
-		ctx *nix.NixCContext
-		ptr *nix.Store
-	}
-	type args struct {
-		data []byte
-	}
 	tests := []struct {
 		name    string
-		fields  fields
-		args    args
-		want    *Derivation
+		setup   func(t *testing.T) *Store
+		data    []byte
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "valid_derivation_json",
+			setup: func(t *testing.T) *Store {
+				t.Helper()
+				return newStoreTestStore(t)
+			},
+			data: []byte(testStoreDerivationJSON),
+		},
+		{
+			name: "invalid_derivation_json",
+			setup: func(t *testing.T) *Store {
+				t.Helper()
+				return newStoreTestStore(t)
+			},
+			data:    []byte(`{"version": 4}`),
+			wantErr: true,
+		},
+		{
+			name: "closed_store",
+			setup: func(t *testing.T) *Store {
+				t.Helper()
+				s := newStoreTestStore(t)
+				if err := s.Close(); err != nil {
+					t.Fatalf("Store.Close() error = %v", err)
+				}
+				return s
+			},
+			data:    []byte(testStoreDerivationJSON),
+			wantErr: true,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Store{
-				ctx: tt.fields.ctx,
-				ptr: tt.fields.ptr,
-			}
-			got, err := s.DerivationFromJSON(tt.args.data)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Store.DerivationFromJSON() error = %v, wantErr %v", err, tt.wantErr)
+			got, err := tt.setup(t).DerivationFromJSON(tt.data)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("Store.DerivationFromJSON() error = nil, want error")
+				}
+				if got != nil {
+					t.Fatalf("Store.DerivationFromJSON() = %v, want nil", got)
+				}
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Store.DerivationFromJSON() = %v, want %v", got, tt.want)
+			if err != nil {
+				t.Fatalf("Store.DerivationFromJSON() error = %v", err)
+			}
+			t.Cleanup(func() {
+				if err := got.Close(); err != nil {
+					t.Fatalf("Derivation.Close() error = %v", err)
+				}
+			})
+
+			raw, err := got.JSON()
+			if err != nil {
+				t.Fatalf("Derivation.JSON() error = %v", err)
+			}
+			var parsed map[string]any
+			if err := json.Unmarshal(raw, &parsed); err != nil {
+				t.Fatalf("json.Unmarshal(Derivation.JSON()) error = %v", err)
+			}
+			if parsed["name"] != "gonix-test" {
+				t.Fatalf("derivation name = %v, want gonix-test", parsed["name"])
 			}
 		})
 	}
 }
 
 func TestStore_DerivationFromPath(t *testing.T) {
-	type fields struct {
-		ctx *nix.NixCContext
-		ptr *nix.Store
-	}
-	type args struct {
-		path *storepath.Path
-	}
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *Derivation
-		wantErr bool
+		name         string
+		setup        func(t *testing.T) (*Store, *storepath.Path)
+		wantErr      bool
+		wantClosed   bool
+		backendError bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "unsupported_path_in_dummy_store",
+			setup: func(t *testing.T) (*Store, *storepath.Path) {
+				t.Helper()
+				s := newStoreTestStore(t)
+				return s, newStoreTestPath(t, s, testZeroStorePath)
+			},
+			wantErr:      true,
+			backendError: true,
+		},
+		{
+			name: "closed_store",
+			setup: func(t *testing.T) (*Store, *storepath.Path) {
+				t.Helper()
+				s := newStoreTestStore(t)
+				path := newStoreTestPath(t, s, testZeroStorePath)
+				if err := s.Close(); err != nil {
+					t.Fatalf("Store.Close() error = %v", err)
+				}
+				return s, path
+			},
+			wantErr:    true,
+			wantClosed: true,
+		},
+		{
+			name: "closed_path",
+			setup: func(t *testing.T) (*Store, *storepath.Path) {
+				t.Helper()
+				s := newStoreTestStore(t)
+				path := newStoreTestPath(t, s, testZeroStorePath)
+				if err := path.Close(); err != nil {
+					t.Fatalf("Path.Close() error = %v", err)
+				}
+				return s, path
+			},
+			wantErr:    true,
+			wantClosed: true,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Store{
-				ctx: tt.fields.ctx,
-				ptr: tt.fields.ptr,
-			}
-			got, err := s.DerivationFromPath(tt.args.path)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Store.DerivationFromPath() error = %v, wantErr %v", err, tt.wantErr)
+			s, path := tt.setup(t)
+			got, err := s.DerivationFromPath(path)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("Store.DerivationFromPath() error = nil, want error")
+				}
+				if tt.wantClosed && !errors.Is(err, status.ErrClosed) {
+					t.Fatalf("Store.DerivationFromPath() error = %v, want status.ErrClosed", err)
+				}
+				if tt.backendError && errors.Is(err, status.ErrClosed) {
+					t.Fatalf("Store.DerivationFromPath() error = %v, want backend error", err)
+				}
+				if got != nil {
+					t.Fatalf("Store.DerivationFromPath() = %v, want nil", got)
+				}
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Store.DerivationFromPath() = %v, want %v", got, tt.want)
+			if err != nil {
+				t.Fatalf("Store.DerivationFromPath() error = %v", err)
 			}
+			t.Cleanup(func() {
+				if err := got.Close(); err != nil {
+					t.Fatalf("Derivation.Close() error = %v", err)
+				}
+			})
 		})
 	}
 }
 
 func TestStore_AddDerivation(t *testing.T) {
-	type fields struct {
-		ctx *nix.NixCContext
-		ptr *nix.Store
-	}
-	type args struct {
-		d *Derivation
-	}
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *storepath.Path
-		wantErr bool
+		name         string
+		setup        func(t *testing.T) (*Store, *Derivation)
+		wantErr      bool
+		wantClosed   bool
+		backendError bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "unsupported_write_derivation_in_dummy_store",
+			setup: func(t *testing.T) (*Store, *Derivation) {
+				t.Helper()
+				s := newStoreTestStore(t)
+				return s, newStoreTestDerivation(t, s)
+			},
+			wantErr:      true,
+			backendError: true,
+		},
+		{
+			name: "closed_store",
+			setup: func(t *testing.T) (*Store, *Derivation) {
+				t.Helper()
+				s := newStoreTestStore(t)
+				d := newStoreTestDerivation(t, s)
+				if err := s.Close(); err != nil {
+					t.Fatalf("Store.Close() error = %v", err)
+				}
+				return s, d
+			},
+			wantErr:    true,
+			wantClosed: true,
+		},
+		{
+			name: "closed_derivation",
+			setup: func(t *testing.T) (*Store, *Derivation) {
+				t.Helper()
+				s := newStoreTestStore(t)
+				d := newStoreTestDerivation(t, s)
+				if err := d.Close(); err != nil {
+					t.Fatalf("Derivation.Close() error = %v", err)
+				}
+				return s, d
+			},
+			wantErr:    true,
+			wantClosed: true,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Store{
-				ctx: tt.fields.ctx,
-				ptr: tt.fields.ptr,
-			}
-			got, err := s.AddDerivation(tt.args.d)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Store.AddDerivation() error = %v, wantErr %v", err, tt.wantErr)
+			s, d := tt.setup(t)
+			got, err := s.AddDerivation(d)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("Store.AddDerivation() error = nil, want error")
+				}
+				if tt.wantClosed && !errors.Is(err, status.ErrClosed) {
+					t.Fatalf("Store.AddDerivation() error = %v, want status.ErrClosed", err)
+				}
+				if tt.backendError && errors.Is(err, status.ErrClosed) {
+					t.Fatalf("Store.AddDerivation() error = %v, want backend error", err)
+				}
+				if got != nil {
+					t.Fatalf("Store.AddDerivation() = %v, want nil", got)
+				}
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Store.AddDerivation() = %v, want %v", got, tt.want)
+			if err != nil {
+				t.Fatalf("Store.AddDerivation() error = %v", err)
 			}
+			t.Cleanup(func() {
+				if err := got.Close(); err != nil {
+					t.Fatalf("Path.Close() error = %v", err)
+				}
+			})
 		})
 	}
 }

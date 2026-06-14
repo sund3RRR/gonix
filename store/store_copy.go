@@ -40,12 +40,17 @@ func (s *Store) CopyClosure(dst *Store, path *storepath.Path) error {
 		return status.ErrClosed
 	}
 
+	dstPtr, err := dst.Borrow()
+	if err != nil {
+		return fmt.Errorf("store: failed to borrow dst store: %w", err)
+	}
+
 	pathPtr, err := path.Borrow()
 	if err != nil {
 		return fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	if code := nix.StoreCopyClosure(s.ctx, s.ptr, s.ptr, pathPtr); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := nix.StoreCopyClosure(s.ctx, s.ptr, dstPtr, pathPtr); status.ErrorCode(code) != status.ErrorCodeOK {
 		return fmt.Errorf("store: failed to copy closure: %w", status.FromContext(s.ctx))
 	}
 

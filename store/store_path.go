@@ -45,7 +45,10 @@ func (s *Store) Version() (string, error) {
 
 	ptr := nix.StoreGetVersion(s.ctx, s.ptr)
 	if ptr == nil {
-		return "", fmt.Errorf("store: failed to get version: %w", status.FromContext(s.ctx))
+		if err := status.FromContext(s.ctx); err != nil {
+			return "", fmt.Errorf("store: failed to get version: %w", err)
+		}
+		return "", nil
 	}
 
 	return utils.TakeCString(ptr), nil
