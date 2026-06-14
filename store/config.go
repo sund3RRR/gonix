@@ -8,9 +8,10 @@ import (
 	"strings"
 )
 
-// Config contains typed Nix store settings.
+// Config contains typed Nix store settings used when opening a Store.
 //
-// Nix receives non-zero settings as store URL query parameters.
+// Nix receives non-zero settings as store parameters. These parameters are
+// backend-specific; unsupported settings are interpreted by Nix, not by gonix.
 type Config struct {
 	// StoreDir is the logical Nix store directory, usually /nix/store.
 	StoreDir string `json:"store,omitempty"`
@@ -57,6 +58,10 @@ type Config struct {
 }
 
 // Params serializes c as Nix store parameters.
+//
+// Empty fields are omitted. Boolean and numeric fields are formatted with Go's
+// standard string representations, and slices are joined with spaces to match
+// Nix list-style store parameters.
 func (c Config) Params() (map[string]string, error) {
 	data, err := json.Marshal(c)
 	if err != nil {

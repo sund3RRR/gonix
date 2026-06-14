@@ -9,6 +9,9 @@ import (
 )
 
 // CopyConfig configures copying a store path between stores.
+//
+// The zero value uses Nix's default copy behavior: no repair pass and no
+// explicit signature check flag.
 type CopyConfig struct {
 	// Repair asks Nix to repair the destination path while copying.
 	Repair bool
@@ -35,6 +38,9 @@ func WithCopyCheckSignatures(check bool) CopyOption {
 }
 
 // CopyClosure copies path and its closure from this store to dst.
+//
+// The source store, destination store, and path are borrowed for the duration
+// of the call. Both stores must use the same logical store directory.
 func (s *Store) CopyClosure(dst *Store, path *storepath.Path) error {
 	if s.ptr == nil {
 		return status.ErrClosed
@@ -58,6 +64,10 @@ func (s *Store) CopyClosure(dst *Store, path *storepath.Path) error {
 }
 
 // CopyPathTo copies path from this store to dst.
+//
+// CopyPathTo copies only the requested path. Use CopyClosure when dependencies
+// should be copied as well. The source store, destination store, and path are
+// borrowed for the duration of the call.
 func (s *Store) CopyPathTo(dst *Store, path *storepath.Path, opts ...CopyOption) error {
 	if s.ptr == nil {
 		return status.ErrClosed

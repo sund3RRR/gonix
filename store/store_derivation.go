@@ -9,6 +9,10 @@ import (
 )
 
 // DerivationFromJSON imports a Nix derivation from JSON.
+//
+// The JSON must use Nix's derivation JSON shape. Nix validates the derivation,
+// including output paths, while importing it. The returned Derivation owns its
+// raw handle and must be closed by the caller.
 func (s *Store) DerivationFromJSON(data []byte) (*Derivation, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed
@@ -23,6 +27,9 @@ func (s *Store) DerivationFromJSON(data []byte) (*Derivation, error) {
 }
 
 // DerivationFromPath loads a derivation from a store path.
+//
+// The path must refer to a derivation known to this store. The returned
+// Derivation owns its raw handle and must be closed by the caller.
 func (s *Store) DerivationFromPath(path *storepath.Path) (*Derivation, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed
@@ -41,7 +48,10 @@ func (s *Store) DerivationFromPath(path *storepath.Path) (*Derivation, error) {
 	return NewDerivation(s.ctx, ptr), nil
 }
 
-// AddDerivation adds d to this store and returns its store path.
+// AddDerivation adds d to this store and returns its derivation store path.
+//
+// The derivation is borrowed for the duration of the call; ownership of d stays
+// with the caller. The returned StorePath is owned by the caller.
 func (s *Store) AddDerivation(d *Derivation) (*storepath.Path, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed

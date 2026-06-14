@@ -10,6 +10,9 @@ import (
 )
 
 // URI returns the store's canonical URI.
+//
+// The returned value is produced by Nix and may be normalized from the URI that
+// was passed to New.
 func (s *Store) URI() (string, error) {
 	if s.ptr == nil {
 		return "", status.ErrClosed
@@ -24,6 +27,8 @@ func (s *Store) URI() (string, error) {
 }
 
 // StoreDir returns the store's logical Nix store directory.
+//
+// This is the directory embedded in store path strings, usually DefaultDir.
 func (s *Store) StoreDir() (string, error) {
 	if s.ptr == nil {
 		return "", status.ErrClosed
@@ -38,6 +43,10 @@ func (s *Store) StoreDir() (string, error) {
 }
 
 // ParsePath parses a full store path for this store.
+//
+// The returned path owns a Nix StorePath handle and must be closed by the
+// caller. ParsePath validates the syntax of the path and leaves semantic
+// validity in this store to IsValidPath.
 func (s *Store) ParsePath(path string) (*storepath.Path, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed
@@ -52,6 +61,10 @@ func (s *Store) ParsePath(path string) (*storepath.Path, error) {
 }
 
 // PathFromHash returns the store path whose hash part matches hashPart.
+//
+// hashPart is the encoded hash portion of a Nix store path, without the store
+// directory or name. If the store has no matching path, Nix reports an error.
+// The returned path is owned by the caller.
 func (s *Store) PathFromHash(hashPart []byte) (*storepath.Path, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed
@@ -66,6 +79,10 @@ func (s *Store) PathFromHash(hashPart []byte) (*storepath.Path, error) {
 }
 
 // RealPath returns the concrete filesystem path for path in this store.
+//
+// For ordinary local stores this is normally the same string as the logical
+// store path. For rooted or redirected stores it may point somewhere else on
+// the host filesystem.
 func (s *Store) RealPath(path *storepath.Path) (string, error) {
 	if s.ptr == nil {
 		return "", status.ErrClosed
@@ -85,6 +102,10 @@ func (s *Store) RealPath(path *storepath.Path) (string, error) {
 }
 
 // IsValidPath reports whether path is valid in this store.
+//
+// A syntactically valid StorePath may still be invalid if it is not registered
+// or available in this store. A false result with a nil error means Nix
+// successfully answered that the path is not valid.
 func (s *Store) IsValidPath(path *storepath.Path) (bool, error) {
 	if s.ptr == nil {
 		return false, status.ErrClosed

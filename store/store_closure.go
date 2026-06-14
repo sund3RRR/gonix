@@ -11,12 +11,19 @@ import (
 )
 
 // Closure contains the store paths in a filesystem closure.
+//
+// A filesystem closure is the set of paths reachable from a root path by Nix's
+// reference graph, optionally including outputs, derivers, or reverse
+// referrers. Closure owns every path in Paths; call Close when done.
 type Closure struct {
-	// Paths are owned store paths in the closure.
+	// Paths are the owned store paths in the closure.
 	Paths []*storepath.Path
 }
 
-// Close releases every owned path in c and is safe to call more than once.
+// Close releases every owned path in c.
+//
+// Close attempts to close every path and returns a joined error if one or more
+// closes fail. It is safe to call more than once.
 func (c *Closure) Close() error {
 	if len(c.Paths) == 0 {
 		return nil
@@ -38,6 +45,9 @@ func (c *Closure) Close() error {
 }
 
 // ClosureConfig configures filesystem closure traversal.
+//
+// The zero value asks Nix for the forward reference closure of the root path
+// without adding derivation outputs or derivers.
 type ClosureConfig struct {
 	// Reverse traverses referrers instead of references.
 	Reverse bool
@@ -45,7 +55,7 @@ type ClosureConfig struct {
 	// IncludeOutputs includes derivation outputs in the closure.
 	IncludeOutputs bool
 
-	// IncludeDerivers includes derivers in the closure.
+	// IncludeDerivers includes derivations that produced paths in the closure.
 	IncludeDerivers bool
 }
 
@@ -53,6 +63,9 @@ type ClosureConfig struct {
 type ClosureOption func(*ClosureConfig)
 
 // WithClosureReverse traverses referrers instead of references.
+//
+// The default is false, which follows references from the root path to its
+// dependencies.
 func WithClosureReverse(reverse bool) ClosureOption {
 	return func(c *ClosureConfig) {
 		c.Reverse = reverse
@@ -66,7 +79,7 @@ func WithClosureOutputs(include bool) ClosureOption {
 	}
 }
 
-// WithClosureDerivers includes derivers in the closure.
+// WithClosureDerivers includes derivations that produced paths in the closure.
 func WithClosureDerivers(include bool) ClosureOption {
 	return func(c *ClosureConfig) {
 		c.IncludeDerivers = include
@@ -74,6 +87,10 @@ func WithClosureDerivers(include bool) ClosureOption {
 }
 
 // Realization describes one realized derivation output.
+//
+// Realise returns one Realization per output produced by Nix. The Path is an
+// owned StorePath clone and must be closed, either directly through Path.Close
+// or by calling Realization.Close.
 type Realization struct {
 	// OutputName is the derivation output name.
 	OutputName string
@@ -82,7 +99,9 @@ type Realization struct {
 	Path *storepath.Path
 }
 
-// Close releases the realized output path and is safe to call more than once.
+// Close releases the realized output path.
+//
+// Close is safe to call more than once.
 func (r *Realization) Close() error {
 	if r.Path == nil {
 		return nil
@@ -98,6 +117,10 @@ func (r *Realization) Close() error {
 }
 
 // Realise builds or substitutes path and returns its realized outputs.
+//
+// The path is borrowed for the duration of the call. Returned realization paths
+// are owned by the caller. If Nix returns several outputs, each output appears
+// as a separate Realization with its output name.
 func (s *Store) Realise(path *storepath.Path) ([]Realization, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed
@@ -123,6 +146,10 @@ func (s *Store) Realise(path *storepath.Path) ([]Realization, error) {
 }
 
 // Closure returns the filesystem closure for path.
+//
+// The path is borrowed for the duration of the call. The returned Closure owns
+// its Paths and must be closed by the caller. Use ClosureOption values to ask
+// Nix for reverse closures, outputs, or derivers.
 func (s *Store) Closure(path *storepath.Path, opts ...ClosureOption) (*Closure, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed
