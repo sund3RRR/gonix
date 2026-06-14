@@ -6,7 +6,6 @@ Guidance for agents working on the `gonix` repository.
 
 `gonix` is a high-level Go SDK for working with Nix.
 
-This repository is intentionally different from `nix-go-bindings`.
 `nix-go-bindings` is the low-level, generated bridge to the Nix C API.
 `gonix` is the ergonomic Go layer built on top of that bridge.
 
@@ -17,51 +16,56 @@ Use `gonix` to provide Go-native APIs for:
 - Evaluation states and Nix values.
 - Derivations.
 - Flakes and locked flakes.
-- Realised outputs and closures.
+- Realized outputs and closures.
 - Error handling and ownership-safe resource lifecycle.
 
 Do not use `gonix` to duplicate generated bindings, call private Nix C++ APIs
 directly, or shell out to the `nix` CLI for core SDK behavior.
 
-The core pieces are:
+Shelling out to `nix` is acceptable only for tests, diagnostics, compatibility
+checks, or explicitly documented fallback tools.
 
-- Nix as the build system and development environment.
-- `nix-go-bindings` as the only direct portal to the Nix C API.
-- Go wrapper types that own or borrow raw Nix resources deliberately.
-- Public APIs that expose Go-native values, errors, and lifecycle methods.
-- Tests that prove users can work through `gonix` without importing raw
-  bindings directly.
+## Documentation
 
-## Architecture
+Use the repository docs as the source of truth for design decisions:
 
-Use Nix for the development shell, tests, and builds. The repository should be
-usable through:
+- [docs/architecture.md](docs/architecture.md): SDK architecture, ownership,
+  package boundaries, dependency direction, object lifetimes, and diagrams.
+- [docs/nix-settings.md](docs/nix-settings.md): Nix settings table with keys,
+  types, defaults, experimental gates, aliases, and descriptions.
 
-- `nix develop github:sund3RRR/nix-go-bindings`
-- `nix develop github:sund3RRR/nix-go-bindings --command go test ./...`
-- `nix build`
+Read the relevant document before changing architecture, ownership, package
+boundaries, runtime settings, or Nix settings behavior.
 
-Use `nix-go-bindings` as the low-level dependency. Raw generated types from that
-package should normally remain internal to `gonix`.
+If a change alters architecture, ownership rules, package boundaries, public
+resource lifecycle, runtime settings semantics, or the supported settings
+surface, update the relevant file in `docs/` in the same change.
 
-Public API should expose stable Go types such as:
+All public Go entities must have concise godoc comments. After adding or
+changing public API documentation, verify the rendered output with `go doc` for
+the affected package or symbols.
 
-- `Client`
-- `Store`
-- `Eval`
-- `Value`
-- `StorePath`
-- `Derivation`
-- `FlakeRef`
-- `LockedFlake`
-- `Package`
-- `Realization`
-- `Closure`
+## Nix-Go-Bindings Boundary
 
-All ownership-sensitive raw pointers must be wrapped before they cross a public
-API boundary.
+Treat `nix-go-bindings` as the only gateway to Nix.
 
-## High-Level API Principles
+Agents working on `gonix` should not modify generated bindings inside this
+repository. If a missing low-level API is required, add it first to
+`nix-go-bindings` through its shim/config/codegen workflow, then consume the new
+generated API from `gonix`.
+
+Do not work around missing bindings by:
+
+- invoking private C++ Nix APIs directly;
+- adding ad hoc cgo calls in `gonix`;
+- reimplementing Nix evaluator, store, flake, or derivation behavior in Go;
+- shelling out to `nix` for core library behavior.
+
+Raw generated types from `nix-go-bindings` should normally remain internal to
+`gonix`. Public APIs should expose Go-native values, errors, options, and
+lifecycle methods.
+
+## API Principles
 
 Prefer Go-native data and control flow:
 
@@ -83,51 +87,77 @@ Use explicit ownership:
 
 Do not expose generated `.Free()` helpers from `nix-go-bindings`. They may call
 raw `C.free` and are not the correct lifecycle operation for many opaque Nix
-objects.
+objects. Use the API-specific lifecycle function instead.
 
 Do not leak raw `unsafe.Pointer` or `nix-go-bindings` types through public APIs
-unless there is a deliberate, documented escape hatch. Preserve Nix semantics
-instead of inventing different behavior.
+unless there is a deliberate, documented escape hatch.
 
-## Nix-Go-Bindings Boundary
+## Error Handling
 
-Treat `nix-go-bindings` as the only gateway to Nix.
+Binding errors must be converted into Go errors consistently. Always preserve
+the Nix context error with `%w` when wrapping.
 
-Agents working on `gonix` should not modify generated bindings inside this
-repository. If a missing low-level API is required, add it first to
-`nix-go-bindings` through its shim/config/codegen workflow, then consume the new
-generated API from `gonix`.
+When a binding call returns a status code, handle it in this style:
 
-Do not work around missing bindings by:
+```go
+if code := nix.SetVerbosity(r.ctx, nix.NixVerbosity(level)); status.ErrorCode(code) != status.ErrorCodeOK {
+	return fmt.Errorf("runtime: set verbosity: %w", status.FromContext(r.ctx))
+}
+```
 
-- Invoking private C++ Nix APIs directly.
-- Adding ad hoc cgo calls in `gonix`.
-- Reimplementing Nix evaluator or store behavior in Go.
-- Shelling out to `nix` for core library behavior.
+When a binding call does not return a status code but returns a pointer or
+result that can signal failure, check that result immediately:
 
-Shelling out to `nix` is acceptable only for tests, diagnostics, compatibility
-checks, or explicitly documented fallback tools.
+```go
+namePtr := nix.StorePathName(p.ptr)
+if namePtr == nil {
+	return "", fmt.Errorf("storepath: failed to get store path name: %w", status.FromContext(p.ctx))
+}
+```
+
+Methods that depend on an owned raw pointer must check the pointer at the start
+of the method. Use the correct zero value for the method's return type:
+
+```go
+if p.ptr == nil {
+	return nil, status.ErrClosed
+}
+```
+
+When a method closes several resources and can collect multiple errors, keep
+closing every resource, join errors, and return one wrapped error:
+
+```go
+func (r *Runtime) Close() error {
+	if r.ctx == nil {
+		return nil
+	}
+
+	errs := make([]error, 0, len(r.resources))
+	for i := len(r.resources) - 1; i >= 0; i-- {
+		if err := r.resources[i].Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	nix.CContextFree(r.ctx)
+	r.ctx = nil
+	r.resources = nil
+
+	if len(errs) != 0 {
+		return fmt.Errorf("runtime: failed to close resources: %w", errors.Join(errs...))
+	}
+
+	return nil
+}
+```
+
+For boolean-returning raw calls, distinguish a real `false` result from a
+context error. Return `(false, nil)` only when the Nix context is still OK.
 
 ## Resource Ownership
 
-Wrap and own lifecycle for all safe entities exported by `nix-go-bindings`,
-including:
-
-- `nix_c_context`
-- `Store`
-- `StorePath`
-- `nix_derivation`
-- `EvalState`
-- `nix_value`
-- list and bindings builders
-- fetcher settings
-- flake settings
-- flake references
-- lock flags
-- locked flakes
-- realised strings
-- store realisation results
-- store path arrays and closures
+Wrap and own lifecycle for all safe entities exported by `nix-go-bindings`.
 
 Every wrapper must make its ownership model clear in code and docs:
 
@@ -139,58 +169,7 @@ Every wrapper must make its ownership model clear in code and docs:
 When ownership is ambiguous, stop and inspect the upstream Nix C API and
 `nix-go-bindings` shim before writing code.
 
-## Error Handling
-
-Convert Nix context errors into a Go error type.
-
-The SDK error type should include:
-
-- error code
-- error name
-- message
-- optional detailed info
-
-All public methods should return `error` when failure is possible. SDK users
-should not need to inspect raw `nix_c_context` values.
-
-Prefer wrapping errors with enough operation context to diagnose failures, while
-preserving access to the original Nix error.
-
-## API Coverage Expectations
-
-Provide wrappers for all safe entities currently exported by `nix-go-bindings`.
-
-The high-level API should include methods to:
-
-- Configure and initialize Nix.
-- Open stores and inspect store metadata.
-- Parse, clone, hash, name, and free store paths.
-- Read and write derivations through supported Nix C API surfaces.
-- Evaluate Nix expressions.
-- Traverse lists and attrsets.
-- Build Go-native values and attrsets.
-- Traverse flake outputs.
-- Lock flakes and read locked flake outputs.
-- Realise store paths.
-- Query closures.
-- Read store path and derivation metadata.
-
-Keep unsupported callback-based APIs out of v1 unless a safe `cgo.Handle`
-registry and lifetime model is explicitly designed. This includes custom
-primops, external value callback descriptors, and arbitrary GC finalizers.
-
-## Documentation Rules
-
-All public Go entities must have concise, informative godoc comments.
-
-Comments should explain what the entity represents or does from the SDK user's
-point of view. Keep them short, but include important ownership, lifecycle,
-error, or Nix-semantics details when those details affect correct use.
-
-After adding or changing public API documentation, verify the rendered output
-with `go doc` for the affected package and symbols.
-
-## Testing Rules
+## Testing
 
 Tests should run inside the Nix development environment:
 
@@ -198,27 +177,10 @@ Tests should run inside the Nix development environment:
 nix develop github:sund3RRR/nix-go-bindings --command go test ./...
 ```
 
-Also keep these checks healthy:
-
-```sh
-GOEXPERIMENT=cgocheck2 go test ./...
-go test -race ./...
-```
-
-Tests should cover:
-
-- Resource ownership and idempotent `Close`.
-- Error conversion from Nix contexts.
-- Store opening, path parsing, path metadata, closures, and realisation.
-- Derivation lifecycle and JSON round trips where supported.
-- Evaluation of simple expressions.
-- Value forcing, primitive getters, list traversal, attrset traversal, and
-  builders.
-- Realised strings and referenced store paths.
-- Flake reference parsing, locking, output traversal, and local test flakes.
-- Isolated temporary stores where possible.
-
 Public API tests should import and use `gonix`, not raw `nix-go-bindings`.
+
+Tests should cover resource ownership, idempotent `Close`, closed-object
+behavior, Nix context error conversion, and public workflows.
 
 After making changes, always run:
 
@@ -227,18 +189,7 @@ make test
 make lint
 ```
 
-## Commit Style
-
-Make logical, reviewable commits. Good examples:
-
-- `feat: add store wrapper`
-- `feat: add eval value API`
-- `feat: add flake traversal`
-- `fix: close realised string paths`
-- `test: cover store realisation`
-
-Avoid mixing unrelated API design, binding dependency updates, ownership fixes,
-and broad behavior changes in one commit.
+If a check cannot be run, state that explicitly and explain why.
 
 ## Boundaries
 
@@ -248,9 +199,6 @@ workflow helpers, ownership wrappers, and typed errors.
 `gonix` should not become a full reimplementation of Nix. It should orchestrate
 Nix through `nix-go-bindings`, not duplicate evaluator, store, flake, or
 derivation behavior in Go.
-
-Profile or state-management features may exist as Go-level abstractions only
-when they are backed by clear Nix store/eval semantics.
 
 Before adding a feature, ask:
 
