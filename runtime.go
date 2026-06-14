@@ -62,18 +62,21 @@ func NewRuntime(opts ...Option) (*Runtime, error) {
 		return nil, fmt.Errorf("runtime: failed to initialize store library: %w", err)
 	}
 
-	if err = r.applySettings(cfg.serialize()); err != nil {
+	err = r.applySettings(cfg.serialize())
+	if err != nil {
 		return nil, fmt.Errorf("runtime: failed to apply settings: %w", err)
 	}
 
 	if cfg.verbosity != nil {
-		if err = r.SetVerbosity(*cfg.verbosity); err != nil {
+		err = r.SetVerbosity(*cfg.verbosity)
+		if err != nil {
 			return nil, fmt.Errorf("runtime: failed to set verbosity: %w", err)
 		}
 	}
 
 	if cfg.logFormat != nil {
-		if err := r.SetLogFormat(*cfg.logFormat); err != nil {
+		err = r.SetLogFormat(*cfg.logFormat)
+		if err != nil {
 			return nil, fmt.Errorf("runtime: failed to set log format: %w", err)
 		}
 	}
