@@ -5,7 +5,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/sund3RRR/gonix"
+	"github.com/sund3RRR/gonix/internal/status"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -98,8 +98,8 @@ func requireClosedError(t *testing.T, err error) {
 	if err == nil {
 		t.Fatal("error = nil, want gonix.ErrClosed")
 	}
-	if !errors.Is(err, gonix.ErrClosed) {
-		t.Fatalf("error = %v, want errors.Is(..., gonix.ErrClosed)", err)
+	if !errors.Is(err, status.ErrClosed) {
+		t.Fatalf("error = %v, want errors.Is(..., status.ErrClosed)", err)
 	}
 }
 
