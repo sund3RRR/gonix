@@ -10,6 +10,35 @@ The goal of this package is to expose Nix concepts through Go-native APIs:
 contexts, stores, store paths, evaluation states, values, derivations, flakes,
 locked flakes, realised outputs, closures, settings, and structured errors.
 
+## Implementation status
+
+`gonix` is currently an early SDK foundation. The implemented surface is useful
+for runtime and store-backed workflows, but the broader high-level SDK is still
+in progress.
+
+- [x] Runtime and settings foundation.
+  - [x] Runtime initialization and shutdown.
+  - [x] Runtime options for selected Nix settings, verbosity, and log format.
+  - [x] Structured Nix error conversion.
+- [x] Store and store path foundation.
+  - [x] Store opening and store metadata.
+  - [x] Store path parsing, cloning, hash/name access, and lifecycle handling.
+  - [x] Filesystem closure traversal.
+  - [x] Path and closure copying between stores.
+- [x] Initial derivation support.
+  - [x] Derivation import/export and cloning.
+  - [x] Store-backed derivation helpers.
+  - [x] Realised output result conversion.
+- [ ] Evaluation and values.
+  - [ ] Evaluation state API.
+  - [ ] Nix value API.
+  - [ ] Value forcing, traversal, calls, and conversion helpers.
+- [ ] Flakes.
+  - [ ] Flake reference parsing.
+  - [ ] Locked flake workflows.
+  - [ ] Locked output access.
+- [ ] Package-oriented convenience API.
+
 ## License
 
 Apache-2.0.
