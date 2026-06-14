@@ -63,3 +63,18 @@ func newStoreParams(cfg Config) (nix.StoreParams, error) {
 		Len:   uint64(len(items)),
 	}, nil
 }
+
+// Close releases the owned Nix store handle and is safe to call more than once.
+func (s *Store) Close() error {
+	if s.ptr == nil {
+		return nil
+	}
+
+	nix.StoreFree(s.ptr)
+	s.ptr = nil
+	if err := status.FromContext(s.ctx); err != nil {
+		return fmt.Errorf("store: failed to free resource: %w", err)
+	}
+
+	return nil
+}
