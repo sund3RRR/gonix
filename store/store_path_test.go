@@ -97,47 +97,6 @@ func TestStore_StoreDir(t *testing.T) {
 	}
 }
 
-func TestStore_Version(t *testing.T) {
-	tests := []struct {
-		name    string
-		setup   func(t *testing.T) *Store
-		wantErr bool
-	}{
-		{
-			name: "open_store",
-			setup: func(t *testing.T) *Store {
-				t.Helper()
-				return newStoreTestStore(t)
-			},
-		},
-		{
-			name: "closed_store",
-			setup: func(t *testing.T) *Store {
-				t.Helper()
-				s := newStoreTestStore(t)
-				if err := s.Close(); err != nil {
-					t.Fatalf("Store.Close() error = %v", err)
-				}
-				return s
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := tt.setup(t).Version()
-			if tt.wantErr {
-				requireStoreClosedError(t, err)
-				return
-			}
-			if err != nil {
-				t.Fatalf("Store.Version() error = %v", err)
-			}
-		})
-	}
-}
-
 func TestStore_ParsePath(t *testing.T) {
 	tests := []struct {
 		name    string

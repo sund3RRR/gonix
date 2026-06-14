@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
+	"github.com/sund3RRR/gonix/internal/utils"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -55,6 +56,23 @@ func New(ctx *nix.NixCContext, uri string, opts ...Option) (*Store, error) {
 		ctx: ctx,
 		ptr: ptr,
 	}, nil
+}
+
+// Version returns the store backend version when the backend reports one.
+func (s *Store) Version() (string, error) {
+	if s.ptr == nil {
+		return "", status.ErrClosed
+	}
+
+	ptr := nix.StoreGetVersion(s.ctx, s.ptr)
+	if ptr == nil {
+		if err := status.FromContext(s.ctx); err != nil {
+			return "", fmt.Errorf("store: failed to get version: %w", err)
+		}
+		return "", nil
+	}
+
+	return utils.TakeCString(ptr), nil
 }
 
 // Borrow returns the borrowed raw Nix store handle.

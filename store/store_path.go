@@ -37,23 +37,6 @@ func (s *Store) StoreDir() (string, error) {
 	return utils.TakeCString(ptr), nil
 }
 
-// Version returns the store backend version when the backend reports one.
-func (s *Store) Version() (string, error) {
-	if s.ptr == nil {
-		return "", status.ErrClosed
-	}
-
-	ptr := nix.StoreGetVersion(s.ctx, s.ptr)
-	if ptr == nil {
-		if err := status.FromContext(s.ctx); err != nil {
-			return "", fmt.Errorf("store: failed to get version: %w", err)
-		}
-		return "", nil
-	}
-
-	return utils.TakeCString(ptr), nil
-}
-
 // ParsePath parses a full store path for this store.
 func (s *Store) ParsePath(path string) (*storepath.Path, error) {
 	if s.ptr == nil {
