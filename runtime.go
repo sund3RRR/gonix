@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sund3RRR/gonix/eval"
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/internal/utils"
 	"github.com/sund3RRR/gonix/store"
@@ -62,6 +63,10 @@ func NewRuntime(opts ...Option) (*Runtime, error) {
 		return nil, fmt.Errorf("runtime: failed to initialize store library: %w", err)
 	}
 
+	if code := nix.LibexprInit(r.ctx); status.ErrorCode(code) != status.ErrorCodeOK {
+		return nil, fmt.Errorf("runtime: failed to initialize expression library: %w", status.FromContext(r.ctx))
+	}
+
 	err = r.applySettings(cfg.serialize())
 	if err != nil {
 		return nil, fmt.Errorf("runtime: failed to apply settings: %w", err)
@@ -97,6 +102,21 @@ func (r *Runtime) OpenStore(uri string, opts ...store.Option) (*store.Store, err
 
 	r.resources = append(r.resources, s)
 	return s, nil
+}
+
+// NewEvaluator creates a Nix evaluator and tracks it for Runtime.Close.
+func (r *Runtime) NewEvaluator(s *store.Store, opts ...eval.Option) (*eval.Evaluator, error) {
+	if r.ctx == nil {
+		return nil, status.ErrClosed
+	}
+
+	e, err := eval.New(r.ctx, s, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: new evaluator: %w", err)
+	}
+
+	r.resources = append(r.resources, e)
+	return e, nil
 }
 
 // Setting returns the current value of a Nix setting.

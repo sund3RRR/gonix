@@ -29,10 +29,10 @@ in progress.
   - [x] Derivation import/export and cloning.
   - [x] Store-backed derivation helpers.
   - [x] Realised output result conversion.
-- [ ] Evaluation and values.
-  - [ ] Evaluation state API.
-  - [ ] Nix value API.
-  - [ ] Value forcing, traversal, calls, and conversion helpers.
+- [x] Evaluation and values.
+  - [x] Evaluation state API.
+  - [x] Nix value API.
+  - [x] Value forcing, traversal, calls, and conversion helpers.
 - [ ] Flakes.
   - [ ] Flake reference parsing.
   - [ ] Locked flake workflows.

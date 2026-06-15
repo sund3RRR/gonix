@@ -254,6 +254,10 @@ Core methods:
 forcing, calls, list traversal, attr traversal, path strings, and realized
 strings require an `EvalState`.
 
+An evaluator tracks values it creates and closes any still-open values before
+freeing its `EvalState`. Calling `Value.Close` directly remains valid and
+idempotent; the evaluator's later cleanup observes the already-closed value.
+
 ### Value
 
 `eval.Value` wraps an owned or refcounted `*nix.NixValue`.
