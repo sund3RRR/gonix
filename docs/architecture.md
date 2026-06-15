@@ -557,6 +557,11 @@ flowchart TB
 Every owned wrapper must implement idempotent `Close() error`. Public operations
 after `Close` should return a wrapped `status.ErrClosed`.
 
+When a raw free function does not accept a Nix context and does not return a
+status code, `Close` should not inspect the wrapper's borrowed context after
+freeing. This keeps late idempotent cleanup from touching a context that may
+already have been released by `Runtime.Close`.
+
 Borrowed raw pointers may be exposed only through narrow, documented escape
 hatches such as `Borrow`. Callers must not free borrowed pointers and must not
 retain them beyond the immediate raw call.

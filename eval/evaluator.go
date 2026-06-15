@@ -94,10 +94,6 @@ func (e *Evaluator) Close() error {
 	e.values = nil
 	e.store = nil
 
-	if err := status.FromContext(e.ctx); err != nil {
-		errs = append(errs, fmt.Errorf("eval: failed to free state: %w", err))
-	}
-
 	if len(errs) != 0 {
 		return fmt.Errorf("eval: failed to close evaluator: %w", errors.Join(errs...))
 	}

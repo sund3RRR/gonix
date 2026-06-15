@@ -114,9 +114,6 @@ func (p *Path) Close() error {
 
 	nix.StorePathFree(p.ptr)
 	p.ptr = nil
-	if err := status.FromContext(p.ctx); err != nil {
-		return fmt.Errorf("storepath: failed to free resource: %w", err)
-	}
 
 	return nil
 }

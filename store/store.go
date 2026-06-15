@@ -128,9 +128,6 @@ func (s *Store) Close() error {
 
 	nix.StoreFree(s.ptr)
 	s.ptr = nil
-	if err := status.FromContext(s.ctx); err != nil {
-		return fmt.Errorf("store: failed to free resource: %w", err)
-	}
 
 	return nil
 }

@@ -92,9 +92,6 @@ func (d *Derivation) Close() error {
 
 	nix.DerivationFree(d.ptr)
 	d.ptr = nil
-	if err := status.FromContext(d.ctx); err != nil {
-		return fmt.Errorf("derivation: failed to free resource: %w", err)
-	}
 
 	return nil
 }

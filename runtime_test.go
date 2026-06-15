@@ -483,6 +483,95 @@ func TestRuntimeOpenStore(t *testing.T) {
 	}
 }
 
+func TestContextFreeChildrenCloseAfterRuntimeClose(t *testing.T) {
+	t.Run("store_path", func(t *testing.T) {
+		r, err := NewRuntime()
+		if err != nil {
+			t.Fatalf("NewRuntime() error = %v", err)
+		}
+		s, err := r.OpenStore("dummy://")
+		if err != nil {
+			t.Fatalf("Runtime.OpenStore() error = %v", err)
+		}
+		path, err := s.ParsePath("/nix/store/00000000000000000000000000000000-demo")
+		if err != nil {
+			t.Fatalf("Store.ParsePath() error = %v", err)
+		}
+
+		if err := r.Close(); err != nil {
+			t.Fatalf("Runtime.Close() error = %v", err)
+		}
+		if err := path.Close(); err != nil {
+			t.Fatalf("Path.Close() after Runtime.Close() error = %v", err)
+		}
+	})
+
+	t.Run("derivation", func(t *testing.T) {
+		r, err := NewRuntime()
+		if err != nil {
+			t.Fatalf("NewRuntime() error = %v", err)
+		}
+		s, err := r.OpenStore("dummy://")
+		if err != nil {
+			t.Fatalf("Runtime.OpenStore() error = %v", err)
+		}
+		d, err := s.DerivationFromJSON([]byte(`{
+  "name": "gonix-test",
+  "version": 4,
+  "outputs": {
+    "out": {
+      "path": "awjawq2kj29m8cg6cmdpyksrjnmlk7jp-gonix-test"
+    }
+  },
+  "inputs": {
+    "srcs": [],
+    "drvs": {}
+  },
+  "system": "x86_64-linux",
+  "builder": "/bin/sh",
+  "args": [],
+  "env": {
+    "builder": "/bin/sh",
+    "name": "gonix-test",
+    "out": "/nix/store/awjawq2kj29m8cg6cmdpyksrjnmlk7jp-gonix-test",
+    "system": "x86_64-linux"
+  }
+}`))
+		if err != nil {
+			t.Fatalf("Store.DerivationFromJSON() error = %v", err)
+		}
+
+		if err := r.Close(); err != nil {
+			t.Fatalf("Runtime.Close() error = %v", err)
+		}
+		if err := d.Close(); err != nil {
+			t.Fatalf("Derivation.Close() after Runtime.Close() error = %v", err)
+		}
+	})
+
+	t.Run("evaluator_without_live_values", func(t *testing.T) {
+		r, err := NewRuntime()
+		if err != nil {
+			t.Fatalf("NewRuntime() error = %v", err)
+		}
+		s, err := r.OpenStore("dummy://")
+		if err != nil {
+			t.Fatalf("Runtime.OpenStore() error = %v", err)
+		}
+		e, err := r.NewEvaluator(s)
+		if err != nil {
+			t.Fatalf("Runtime.NewEvaluator() error = %v", err)
+		}
+
+		if err := r.Close(); err != nil {
+			t.Fatalf("Runtime.Close() error = %v", err)
+		}
+		if err := e.Close(); err != nil {
+			t.Fatalf("Evaluator.Close() after Runtime.Close() error = %v", err)
+		}
+	})
+}
+
 func TestRuntimeMethodsAfterClose(t *testing.T) {
 	r, err := NewRuntime()
 	if err != nil {
