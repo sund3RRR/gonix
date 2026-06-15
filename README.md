@@ -33,11 +33,18 @@ in progress.
   - [x] Evaluation state API.
   - [x] Nix value API.
   - [x] Value forcing, traversal, calls, and conversion helpers.
+- [ ] Fetchers.
+  - [ ] Fetcher settings lifecycle.
+  - [ ] Fetch tree and input resolution helpers.
+  - [ ] Store path conversion for fetched inputs.
 - [ ] Flakes.
   - [ ] Flake reference parsing.
   - [ ] Locked flake workflows.
   - [ ] Locked output access.
-- [ ] Package-oriented convenience API.
+- [ ] Nix package convenience API.
+  - [ ] Package-shaped value wrappers.
+  - [ ] Build/install metadata helpers.
+  - [ ] Store-backed package realization helpers.
 
 ## License
 
