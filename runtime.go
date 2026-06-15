@@ -64,6 +64,7 @@ func NewRuntime(opts ...Option) (*Runtime, error) {
 	}
 
 	if code := nix.LibexprInit(r.ctx); status.ErrorCode(code) != status.ErrorCodeOK {
+		err = status.FromContext(r.ctx)
 		return nil, fmt.Errorf("runtime: failed to initialize expression library: %w", status.FromContext(r.ctx))
 	}
 
