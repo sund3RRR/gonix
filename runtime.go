@@ -4,14 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
-	"strconv"
-	"strings"
 
 	"github.com/sund3RRR/gonix/eval"
 	"github.com/sund3RRR/gonix/fetchers"
+	"github.com/sund3RRR/gonix/flake"
 	"github.com/sund3RRR/gonix/internal/status"
-	"github.com/sund3RRR/gonix/internal/utils"
 	"github.com/sund3RRR/gonix/store"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
@@ -23,8 +20,10 @@ import (
 // resource created through the Runtime and then releases the underlying Nix
 // context.
 type Runtime struct {
-	ctx       *nix.NixCContext
-	resources []io.Closer
+	ctx                  *nix.NixCContext
+	resources            []io.Closer
+	flakeFetcherSettings *fetchers.Settings
+	flakeSettings        *flake.Settings
 }
 
 // NewRuntime creates and initializes a Nix runtime.
@@ -49,26 +48,47 @@ func NewRuntime(opts ...Option) (*Runtime, error) {
 		}
 	}()
 
+	// Init nix libutil
 	if code := nix.LibutilInit(ctx); status.ErrorCode(code) != status.ErrorCodeOK {
 		err = status.FromContext(ctx)
 		return nil, fmt.Errorf("runtime: failed to initialize util library: %w", err)
 	}
 
+	// Init nix libstore
 	libStoreInitFn := nix.LibstoreInitNoLoadConfig
 	if cfg.loadConfig {
 		libStoreInitFn = nix.LibstoreInit
 	}
-
 	if code := libStoreInitFn(ctx); status.ErrorCode(code) != status.ErrorCodeOK {
 		err = status.FromContext(ctx)
 		return nil, fmt.Errorf("runtime: failed to initialize store library: %w", err)
 	}
 
+	// Init nix libexpr
 	if code := nix.LibexprInit(r.ctx); status.ErrorCode(code) != status.ErrorCodeOK {
 		err = status.FromContext(r.ctx)
-		return nil, fmt.Errorf("runtime: failed to initialize expression library: %w", status.FromContext(r.ctx))
+		return nil, fmt.Errorf("runtime: failed to initialize expression library: %w", err)
 	}
 
+	// Init nix libfetchers
+	var fetcherSettings *fetchers.Settings
+	fetcherSettings, err = fetchers.New(r.ctx)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: failed to create fetcher settings: %w", err)
+	}
+	r.flakeFetcherSettings = fetcherSettings
+	r.resources = append(r.resources, fetcherSettings)
+
+	// Init nix libflake
+	var flakeSettings *flake.Settings
+	flakeSettings, err = flake.NewSettings(r.ctx)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: failed to create flake settings: %w", err)
+	}
+	r.flakeSettings = flakeSettings
+	r.resources = append(r.resources, flakeSettings)
+
+	// Apply config
 	err = r.applySettings(cfg.serialize())
 	if err != nil {
 		return nil, fmt.Errorf("runtime: failed to apply settings: %w", err)
@@ -116,132 +136,39 @@ func (r *Runtime) NewEvaluator(s *store.Store, opts ...eval.Option) (*eval.Evalu
 	if err != nil {
 		return nil, fmt.Errorf("runtime: new evaluator: %w", err)
 	}
-
 	r.resources = append(r.resources, e)
+
 	return e, nil
 }
 
-// NewFetcherSettings creates Nix fetcher settings and tracks them for Runtime.Close.
-func (r *Runtime) NewFetcherSettings() (*fetchers.Settings, error) {
+// ParseFlakeRef parses a flake reference and tracks it for Runtime.Close.
+func (r *Runtime) ParseFlakeRef(ref string, opts ...flake.ParseOption) (*flake.Ref, error) {
 	if r.ctx == nil {
 		return nil, status.ErrClosed
 	}
 
-	settings, err := fetchers.New(r.ctx)
+	parsed, err := flake.NewParsedRef(r.ctx, r.flakeFetcherSettings, r.flakeSettings, ref, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("runtime: new fetcher settings: %w", err)
+		return nil, fmt.Errorf("runtime: parse flake ref: %w", err)
 	}
+	r.resources = append(r.resources, parsed)
 
-	r.resources = append(r.resources, settings)
-	return settings, nil
+	return parsed, nil
 }
 
-// Setting returns the current value of a Nix setting.
-func (r *Runtime) Setting(key string) (string, error) {
+// LockFlake locks a flake reference and tracks it for Runtime.Close.
+func (r *Runtime) LockFlake(e *eval.Evaluator, ref *flake.Ref, opts ...flake.LockOption) (*flake.LockedFlake, error) {
 	if r.ctx == nil {
-		return "", status.ErrClosed
+		return nil, status.ErrClosed
 	}
 
-	ptr := nix.SettingGet(r.ctx, key)
-	if ptr == nil {
-		return "", fmt.Errorf("runtime: get setting %q: %w", key, status.FromContext(r.ctx))
+	locked, err := flake.NewLockedFlake(r.ctx, r.flakeFetcherSettings, r.flakeSettings, e, ref, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: lock flake: %w", err)
 	}
 
-	return utils.TakeCString(ptr), nil
-}
-
-// SetSetting sets a Nix setting.
-func (r *Runtime) SetSetting(key, value string) error {
-	if r.ctx == nil {
-		return status.ErrClosed
-	}
-
-	if code := nix.SettingSet(r.ctx, key, value); status.ErrorCode(code) != status.ErrorCodeOK {
-		return fmt.Errorf("runtime: set setting %q: %w", key, status.FromContext(r.ctx))
-	}
-
-	return nil
-}
-
-// SetVerbosity sets the Nix verbosity level.
-func (r *Runtime) SetVerbosity(level Verbosity) error {
-	if r.ctx == nil {
-		return status.ErrClosed
-	}
-
-	if code := nix.SetVerbosity(r.ctx, nix.NixVerbosity(level)); status.ErrorCode(code) != status.ErrorCodeOK {
-		return fmt.Errorf("runtime: set verbosity: %w", status.FromContext(r.ctx))
-	}
-
-	return nil
-}
-
-// SetLogFormat sets the Nix log format.
-func (r *Runtime) SetLogFormat(format LogFormat) error {
-	if r.ctx == nil {
-		return status.ErrClosed
-	}
-
-	if code := nix.SetLogFormat(r.ctx, string(format)); status.ErrorCode(code) != status.ErrorCodeOK {
-		return fmt.Errorf("runtime: set log format: %w", status.FromContext(r.ctx))
-	}
-
-	return nil
-}
-
-// SetExperimentalFeatures sets Nix experimental features.
-func (r *Runtime) SetExperimentalFeatures(features ...ExperimentalFeature) error {
-	return r.SetSetting(settingExperimentalFeatures, formatExperimentalFeatures(features))
-}
-
-// SetCores sets the number of cores exposed to builders through NIX_BUILD_CORES.
-func (r *Runtime) SetCores(cores int) error {
-	return r.SetSetting(settingCores, strconv.Itoa(cores))
-}
-
-// SetMaxJobs sets the maximum number of local build jobs.
-func (r *Runtime) SetMaxJobs(maxJobs int) error {
-	return r.SetSetting(settingMaxJobs, strconv.Itoa(maxJobs))
-}
-
-// SetMaxJobsAuto lets Nix choose the maximum number of local build jobs.
-func (r *Runtime) SetMaxJobsAuto() error {
-	return r.SetSetting(settingMaxJobs, "auto")
-}
-
-// SetSystem sets the Nix build system.
-func (r *Runtime) SetSystem(system System) error {
-	return r.SetSetting(settingSystem, string(system))
-}
-
-// SetEvalSystem sets the Nix evaluation system.
-func (r *Runtime) SetEvalSystem(system System) error {
-	return r.SetSetting(settingEvalSystem, string(system))
-}
-
-// SetSubstituters sets the substituter store URLs.
-func (r *Runtime) SetSubstituters(urls ...string) error {
-	return r.SetSetting(settingSubstituters, strings.Join(urls, " "))
-}
-
-// SetTrustedPublicKeys sets trusted binary cache public keys.
-func (r *Runtime) SetTrustedPublicKeys(keys ...string) error {
-	return r.SetSetting(settingTrustedPublicKeys, strings.Join(keys, " "))
-}
-
-// SetPureEval controls pure evaluation mode.
-func (r *Runtime) SetPureEval(pure bool) error {
-	return r.SetSetting(settingPureEval, strconv.FormatBool(pure))
-}
-
-// SetImportFromDerivation controls whether evaluation may import from derivations.
-func (r *Runtime) SetImportFromDerivation(allow bool) error {
-	return r.SetSetting(settingAllowImportFromDerivation, strconv.FormatBool(allow))
-}
-
-// SetAcceptFlakeConfig controls whether flake-provided Nix settings are accepted.
-func (r *Runtime) SetAcceptFlakeConfig(accept bool) error {
-	return r.SetSetting(settingAcceptFlakeConfig, strconv.FormatBool(accept))
+	r.resources = append(r.resources, locked)
+	return locked, nil
 }
 
 // Close releases resources created through r and then releases the Nix context.
@@ -263,38 +190,11 @@ func (r *Runtime) Close() error {
 	nix.CContextFree(r.ctx)
 	r.ctx = nil
 	r.resources = nil
+	r.flakeFetcherSettings = nil
+	r.flakeSettings = nil
 
 	if len(errs) != 0 {
 		return fmt.Errorf("runtime: failed to close resources: %w", errors.Join(errs...))
-	}
-
-	return nil
-}
-
-func (r *Runtime) applySettings(settings map[string]string) error {
-	if len(settings) == 0 {
-		return nil
-	}
-
-	if value, ok := settings[settingExperimentalFeatures]; ok {
-		if err := r.SetSetting(settingExperimentalFeatures, value); err != nil {
-			return err
-		}
-	}
-
-	keys := make([]string, 0, len(settings))
-	for key := range settings {
-		if key == settingExperimentalFeatures {
-			continue
-		}
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	for _, key := range keys {
-		if err := r.SetSetting(key, settings[key]); err != nil {
-			return err
-		}
 	}
 
 	return nil
