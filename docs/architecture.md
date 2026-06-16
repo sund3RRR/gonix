@@ -54,7 +54,7 @@ into a large proxy facade.
 - Open stores.
 - Create evaluators.
 - Parse and lock flakes.
-- Lazily own fetcher and flake settings when flake APIs need them.
+- Own fetcher and flake settings for flake APIs.
 - Track resources created through the runtime and close them in reverse order.
 
 ### Runtime lifetime
@@ -95,7 +95,7 @@ Nix noun.
 | `store` | `Store`, `Derivation`, `Realization`, `Closure` | Store-backed workflows: store metadata, path parsing, derivations, realization, closure traversal, copying. |
 | `eval` | `Evaluator`, `Value`, `ValueType`, builders, realized strings | Evaluation state and values. `Value` lives here because many value operations require an `EvalState`. |
 | `fetchers` | `Settings` | Fetcher settings lifecycle for APIs that fetch or parse flake inputs. |
-| `flake` | `Ref`, `LockedFlake`, parse and lock options | Flake references, locking, and locked output access. |
+| `flake` | `Settings`, `Ref`, `LockedFlake`, parse and lock options | Flake settings lifecycle, flake references, locking, and locked output access. |
 | `nixpkg` | `Package` | Later convenience layer around package-shaped Nix values. `package` is a Go keyword. |
 | `internal/status` | `NixError`, `ErrorCode`, `ErrClosed` | Conversion from mutable Nix context errors into stable Go errors. |
 | `internal/utils` | C string and small raw adapters | Shared implementation details for wrappers. |
@@ -128,13 +128,14 @@ as `Evaluator.Force(value)` or `Evaluator.Attr(value, name)`.
 
 | Abstraction | Owns | Borrows or depends on | Public inputs |
 | --- | --- | --- | --- |
-| `gonix.Runtime` | `*nix.NixCContext`, process settings, lazy fetcher/flake settings | nothing above it | runtime options, store URIs, high-level option structs |
+| `gonix.Runtime` | `*nix.NixCContext`, process settings, fetcher/flake settings | nothing above it | runtime options, store URIs, high-level option structs |
 | `store.Store` | `*nix.Store` | runtime context | `*storepath.Path`, `*store.Derivation`, store options |
 | `storepath.Path` | `*nix.StorePath` | Nix context for error-producing methods | no `Store`; raw pointer only through `New` and `Borrow` escape hatches |
 | `store.Derivation` | `*nix.NixDerivation` | runtime/store context for JSON and store operations | JSON strings, cloned derivations |
 | `eval.Evaluator` | `*nix.EvalState` | `*store.Store`, runtime context | `*eval.Value` for state-dependent value operations |
 | `eval.Value` | `*nix.NixValue` reference | evaluator identity and context | state-independent getters only; state-dependent operations go through `Evaluator` |
 | `fetchers.Settings` | `*nix.NixFetchersSettings` | runtime context | raw pointer only through `Borrow` escape hatch |
+| `flake.Settings` | `*nix.NixFlakeSettings` | runtime context | raw pointer only through `Borrow` escape hatch |
 | `flake.Ref` | `*nix.NixFlakeReference`, fragment string | fetcher/flake settings context | parse options, input override paths |
 | `flake.LockedFlake` | `*nix.NixLockedFlake` | `*eval.Evaluator`, flake settings | lock options, `*flake.Ref`; returns `*eval.Value` outputs |
 | `nixpkg.Package` | usually no raw Nix object; may wrap an `eval.Value` | `*eval.Evaluator`, optional `*store.Store` | package value plus evaluator/store-backed helpers |
@@ -147,7 +148,6 @@ Typical creation surface:
 - `Runtime.Close() error`
 - `Runtime.OpenStore(uri string, opts ...store.Option) (*store.Store, error)`
 - `Runtime.NewEvaluator(store *store.Store, opts ...eval.Option) (*eval.Evaluator, error)`
-- `Runtime.NewFetcherSettings() (*fetchers.Settings, error)`
 - `Runtime.ParseFlakeRef(ref string, opts ...flake.ParseOption) (*flake.Ref, error)`
 - `Runtime.LockFlake(e *eval.Evaluator, ref *flake.Ref, opts ...flake.LockOption) (*flake.LockedFlake, error)`
 
@@ -287,6 +287,10 @@ Value methods:
 - `Borrow() (*nix.NixValue, error)`;
 - `Close() error`.
 
+`Evaluator.WrapValue(ptr)` is a narrow sibling-package integration point for
+adopting owned raw values returned by Nix APIs, such as locked flake output
+attrs. Ordinary user code should not need it.
+
 `Value.Close` should call `ValueDecref`. Values returned by list and attr
 lookups should be treated as owned references unless upstream ownership proves
 otherwise.
@@ -390,8 +394,8 @@ flowchart TD
     Package["nixpkg.Package\nconvenience wrapper around package Value"]
 
     Runtime -->|exposes| Settings
-    Runtime -->|owns lazily| Fetchers
-    Runtime -->|owns lazily| FlakeSettings
+    Runtime -->|owns| Fetchers
+    Runtime -->|owns| FlakeSettings
     Runtime -->|opens| Store
     Runtime -->|creates| EvalBuilder
     Runtime -->|creates| Eval
@@ -555,10 +559,10 @@ flowchart TB
 | list/attr builders | raw builders | internal temporary | matching builder free function |
 | realized strings | `*nix.NixRealisedString` | internal temporary | `RealisedStringFree` |
 | `fetchers.Settings` | `*nix.NixFetchersSettings` | owned, borrows runtime context | `FetchersSettingsFree` |
+| `flake.Settings` | `*nix.NixFlakeSettings` | owned, borrows runtime context | `FlakeSettingsFree` |
 | `flake.Ref` | `*nix.NixFlakeReference` | owned | `FlakeReferenceFree` |
 | `flake.LockedFlake` | `*nix.NixLockedFlake` | owned, borrows `eval.Evaluator` | `LockedFlakeFree` |
 | `nixpkg.Package` | none directly | wraps or borrows package `eval.Value`; may borrow `store.Store` | no raw free; close owned `Value` if it owns one |
-| fetcher/flake settings | raw settings | owned by `Runtime` | matching settings free functions |
 
 Every owned wrapper must implement idempotent `Close() error`. Public operations
 after `Close` should return a wrapped `status.ErrClosed`.
@@ -605,7 +609,7 @@ Expected layout for v1:
 | `eval/builders.go` | Go-to-Nix values, list builders, attr builders. |
 | `eval/realised_string.go` | Realized string conversion and referenced path cloning. |
 | `fetchers/settings.go` | `fetchers.Settings`, constructors, borrow, close. |
-| `flake/ref.go`, `flake/lock.go` | Flake references, parse options, lock options, locked output attrs. |
+| `flake/settings.go`, `flake/ref.go`, `flake/lock.go` | Flake settings, flake references, parse options, lock options, locked output attrs. |
 | `nixpkg/package.go` | Later package convenience layer. |
 | `internal/status` | Error conversion, error codes, `ErrClosed`. |
 | `internal/utils` | C string conversion and small raw adapters. |

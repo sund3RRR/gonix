@@ -38,9 +38,9 @@ in progress.
   - [ ] Fetch tree and input resolution helpers.
   - [ ] Store path conversion for fetched inputs.
 - [ ] Flakes.
-  - [ ] Flake reference parsing.
-  - [ ] Locked flake workflows.
-  - [ ] Locked output access.
+  - [x] Flake reference parsing.
+  - [x] Locked flake workflows.
+  - [x] Locked output access.
 - [ ] Nix package convenience API.
   - [ ] Package-shaped value wrappers.
   - [ ] Build/install metadata helpers.
