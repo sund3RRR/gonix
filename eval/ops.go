@@ -159,7 +159,12 @@ func (e *Evaluator) Index(v *Value, index uint32) (*Value, error) {
 		return nil, fmt.Errorf("eval: failed to get list item %d: %w", index, status.FromContext(e.ctx))
 	}
 
-	return e.wrapValue(child), nil
+	value, err := e.WrapValue(child)
+	if err != nil {
+		return nil, fmt.Errorf("eval: failed to wrap value: %w", err)
+	}
+
+	return value, nil
 }
 
 // Attr returns the forced attribute named name.
@@ -177,7 +182,12 @@ func (e *Evaluator) Attr(v *Value, name string) (*Value, error) {
 		return nil, fmt.Errorf("eval: failed to get attr %q: %w", name, status.FromContext(e.ctx))
 	}
 
-	return e.wrapValue(child), nil
+	value, err := e.WrapValue(child)
+	if err != nil {
+		return nil, fmt.Errorf("eval: failed to wrap value: %w", err)
+	}
+
+	return value, nil
 }
 
 // AttrByIndex returns the forced attribute value at index.
@@ -195,7 +205,12 @@ func (e *Evaluator) AttrByIndex(v *Value, index uint32) (*Value, error) {
 		return nil, fmt.Errorf("eval: failed to get attr by index %d: %w", index, status.FromContext(e.ctx))
 	}
 
-	return e.wrapValue(child), nil
+	value, err := e.WrapValue(child)
+	if err != nil {
+		return nil, fmt.Errorf("eval: failed to wrap value: %w", err)
+	}
+
+	return value, nil
 }
 
 // AttrName returns the attribute name at index.
@@ -232,15 +247,4 @@ func (e *Evaluator) HasAttr(v *Value, name string) (bool, error) {
 	}
 
 	return got, nil
-}
-
-func (e *Evaluator) wrapValue(ptr *nix.NixValue) *Value {
-	value := &Value{
-		ctx:   e.ctx,
-		ptr:   ptr,
-		owner: e,
-	}
-	e.values = append(e.values, value)
-
-	return value
 }

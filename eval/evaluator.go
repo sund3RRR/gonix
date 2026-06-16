@@ -73,6 +73,27 @@ func (e *Evaluator) Borrow() (*nix.EvalState, error) {
 	return e.state, nil
 }
 
+// WrapValue adopts an owned raw Nix value as a Value tied to e.
+//
+// This is an integration point for sibling gonix packages that receive owned or
+// refcounted values from lower-level Nix APIs. Callers transfer ownership of
+// ptr to the returned Value and must not decref ptr directly after a successful
+// call.
+func (e *Evaluator) WrapValue(ptr *nix.NixValue) (*Value, error) {
+	if e.state == nil {
+		return nil, status.ErrClosed
+	}
+
+	value := &Value{
+		ctx:   e.ctx,
+		ptr:   ptr,
+		owner: e,
+	}
+	e.values = append(e.values, value)
+
+	return value, nil
+}
+
 // Close releases values created by e and then releases the owned EvalState.
 //
 // Close is safe to call more than once. Once Close returns, methods that need
