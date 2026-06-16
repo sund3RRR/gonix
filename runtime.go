@@ -72,7 +72,7 @@ func NewRuntime(opts ...Option) (*Runtime, error) {
 
 	// Init nix libfetchers
 	var fetcherSettings *fetchers.Settings
-	fetcherSettings, err = fetchers.New(r.ctx)
+	fetcherSettings, err = fetchers.NewSettings(r.ctx)
 	if err != nil {
 		return nil, fmt.Errorf("runtime: failed to create fetcher settings: %w", err)
 	}

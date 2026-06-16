@@ -40,7 +40,7 @@ func requireClosedError(t *testing.T, err error) {
 func TestNew(t *testing.T) {
 	ctx := newTestContext(t)
 
-	settings, err := New(ctx)
+	settings, err := NewSettings(ctx)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -62,7 +62,7 @@ func TestNew(t *testing.T) {
 func TestSettingsClose(t *testing.T) {
 	ctx := newTestContext(t)
 
-	settings, err := New(ctx)
+	settings, err := NewSettings(ctx)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

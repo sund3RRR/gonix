@@ -18,12 +18,12 @@ type Settings struct {
 	ptr *nix.NixFetchersSettings
 }
 
-// New creates fetcher settings using an initialized Nix context.
+// NewSettings creates fetcher settings using an initialized Nix context.
 //
 // The returned Settings owns the raw Nix fetcher settings handle and must be
 // closed by the caller. The ctx argument is borrowed and must remain valid for
 // as long as the Settings is used.
-func New(ctx *nix.NixCContext) (*Settings, error) {
+func NewSettings(ctx *nix.NixCContext) (*Settings, error) {
 	ptr := nix.FetchersSettingsNew(ctx)
 	if ptr == nil {
 		return nil, fmt.Errorf("fetchers: failed to create settings: %w", status.FromContext(ctx))
