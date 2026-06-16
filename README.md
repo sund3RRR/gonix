@@ -37,7 +37,7 @@ in progress.
   - [x] Fetcher settings lifecycle.
   - [ ] Fetch tree and input resolution helpers.
   - [ ] Store path conversion for fetched inputs.
-- [ ] Flakes.
+- [x] Flakes.
   - [x] Flake reference parsing.
   - [x] Locked flake workflows.
   - [x] Locked output access.
