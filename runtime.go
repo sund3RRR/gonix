@@ -21,9 +21,9 @@ import (
 // context.
 type Runtime struct {
 	ctx                  *nix.NixCContext
-	resources            []io.Closer
 	flakeFetcherSettings *fetchers.Settings
 	flakeSettings        *flake.Settings
+	resources            []io.Closer
 }
 
 // NewRuntime creates and initializes a Nix runtime.
@@ -121,8 +121,8 @@ func (r *Runtime) OpenStore(uri string, opts ...store.Option) (*store.Store, err
 	if err != nil {
 		return nil, fmt.Errorf("runtime: open store: %w", err)
 	}
-
 	r.resources = append(r.resources, s)
+
 	return s, nil
 }
 
@@ -166,8 +166,8 @@ func (r *Runtime) LockFlake(e *eval.Evaluator, ref *flake.Ref, opts ...flake.Loc
 	if err != nil {
 		return nil, fmt.Errorf("runtime: lock flake: %w", err)
 	}
-
 	r.resources = append(r.resources, locked)
+
 	return locked, nil
 }
 
