@@ -49,6 +49,37 @@ const (
 	ValueTypeFailed
 )
 
+func (vt ValueType) String() string {
+	switch vt {
+	case ValueTypeThunk:
+		return "thunk"
+	case ValueTypeInt:
+		return "int"
+	case ValueTypeFloat:
+		return "float"
+	case ValueTypeBool:
+		return "bool"
+	case ValueTypeString:
+		return "string"
+	case ValueTypePath:
+		return "path"
+	case ValueTypeNull:
+		return "null"
+	case ValueTypeAttrs:
+		return "attrs"
+	case ValueTypeList:
+		return "list"
+	case ValueTypeFunction:
+		return "function"
+	case ValueTypeExternal:
+		return "external"
+	case ValueTypeFailed:
+		return "failed"
+	default:
+		return ""
+	}
+}
+
 // Value owns a reference to a Nix value.
 //
 // Values are tied to the Evaluator that created them. State-independent

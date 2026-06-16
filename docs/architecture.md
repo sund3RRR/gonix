@@ -253,6 +253,7 @@ Core methods:
 - `Index(value, i)`;
 - `Attr(value, name)`;
 - `RealiseString(value)`;
+- `Unmarshal(value, out)`;
 - `Close() error`.
 
 `Evaluator` creates `Value` wrappers. Values are tied to the evaluator because
@@ -294,6 +295,12 @@ attrs. Ordinary user code should not need it.
 `Value.Close` should call `ValueDecref`. Values returned by list and attr
 lookups should be treated as owned references unless upstream ownership proves
 otherwise.
+
+`Evaluator.Unmarshal(value, out)` decodes Nix values into Go structs and other
+supported Go values using `nix` field tags and `validate:"required"` markers.
+It is an evaluator method because attr and list traversal require the owning
+`EvalState`. Extra Nix attrs are ignored; missing optional attrs leave their Go
+fields unchanged.
 
 ### Realization and Closure
 
@@ -607,6 +614,7 @@ Expected layout for v1:
 | `eval/value.go` | `eval.Value`, `ValueType`, primitive getters, ownership, borrow. |
 | `eval/ops.go` | State-dependent value operations as `Evaluator` methods. |
 | `eval/builders.go` | Go-to-Nix values, list builders, attr builders. |
+| `eval/unmarshal.go` | Nix value to Go reflection decoder. |
 | `eval/realised_string.go` | Realized string conversion and referenced path cloning. |
 | `fetchers/settings.go` | `fetchers.Settings`, constructors, borrow, close. |
 | `flake/settings.go`, `flake/ref.go`, `flake/lock.go` | Flake settings, flake references, parse options, lock options, locked output attrs. |
