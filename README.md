@@ -34,7 +34,7 @@ in progress.
   - [x] Nix value API.
   - [x] Value forcing, traversal, calls, and conversion helpers.
 - [ ] Fetchers.
-  - [ ] Fetcher settings lifecycle.
+  - [x] Fetcher settings lifecycle.
   - [ ] Fetch tree and input resolution helpers.
   - [ ] Store path conversion for fetched inputs.
 - [ ] Flakes.

@@ -483,6 +483,82 @@ func TestRuntimeOpenStore(t *testing.T) {
 	}
 }
 
+func TestRuntimeNewFetcherSettings(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(t *testing.T, r *Runtime)
+	}{
+		{
+			name: "new_fetcher_settings",
+			run: func(t *testing.T, r *Runtime) {
+				t.Helper()
+
+				settings, err := r.NewFetcherSettings()
+				if err != nil {
+					t.Fatalf("Runtime.NewFetcherSettings() error = %v", err)
+				}
+				if settings == nil {
+					t.Fatal("Runtime.NewFetcherSettings() settings = nil")
+				}
+				ptr, err := settings.Borrow()
+				if err != nil {
+					t.Fatalf("Settings.Borrow() error = %v", err)
+				}
+				if ptr == nil {
+					t.Fatal("Settings.Borrow() = nil, want non-nil")
+				}
+			},
+		},
+		{
+			name: "runtime_close_closes_fetcher_settings",
+			run: func(t *testing.T, r *Runtime) {
+				t.Helper()
+
+				settings, err := r.NewFetcherSettings()
+				if err != nil {
+					t.Fatalf("Runtime.NewFetcherSettings() error = %v", err)
+				}
+				if err := r.Close(); err != nil {
+					t.Fatalf("Runtime.Close() error = %v", err)
+				}
+				if err := settings.Close(); err != nil {
+					t.Fatalf("Settings.Close() after Runtime.Close() error = %v", err)
+				}
+				_, err = settings.Borrow()
+				requireRuntimeClosedError(t, err)
+			},
+		},
+		{
+			name: "new_fetcher_settings_after_close",
+			run: func(t *testing.T, r *Runtime) {
+				t.Helper()
+
+				if err := r.Close(); err != nil {
+					t.Fatalf("Runtime.Close() error = %v", err)
+				}
+				_, err := r.NewFetcherSettings()
+				requireRuntimeClosedError(t, err)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := NewRuntime()
+			if err != nil {
+				t.Fatalf("NewRuntime() error = %v", err)
+			}
+			t.Cleanup(func() {
+				if err := r.Close(); err != nil {
+					t.Fatalf("Runtime.Close() error = %v", err)
+				}
+			})
+
+			tt.run(t, r)
+		})
+	}
+}
+
 func TestContextFreeChildrenCloseAfterRuntimeClose(t *testing.T) {
 	t.Run("store_path", func(t *testing.T) {
 		r, err := NewRuntime()
@@ -570,6 +646,24 @@ func TestContextFreeChildrenCloseAfterRuntimeClose(t *testing.T) {
 			t.Fatalf("Evaluator.Close() after Runtime.Close() error = %v", err)
 		}
 	})
+
+	t.Run("fetcher_settings", func(t *testing.T) {
+		r, err := NewRuntime()
+		if err != nil {
+			t.Fatalf("NewRuntime() error = %v", err)
+		}
+		settings, err := r.NewFetcherSettings()
+		if err != nil {
+			t.Fatalf("Runtime.NewFetcherSettings() error = %v", err)
+		}
+
+		if err := r.Close(); err != nil {
+			t.Fatalf("Runtime.Close() error = %v", err)
+		}
+		if err := settings.Close(); err != nil {
+			t.Fatalf("Settings.Close() after Runtime.Close() error = %v", err)
+		}
+	})
 }
 
 func TestRuntimeMethodsAfterClose(t *testing.T) {
@@ -597,6 +691,8 @@ func TestRuntimeMethodsAfterClose(t *testing.T) {
 	requireRuntimeClosedError(t, r.SetPureEval(true))
 	requireRuntimeClosedError(t, r.SetImportFromDerivation(false))
 	requireRuntimeClosedError(t, r.SetAcceptFlakeConfig(true))
+	_, err = r.NewFetcherSettings()
+	requireRuntimeClosedError(t, err)
 }
 
 func requireRuntimeClosedError(t *testing.T, err error) {

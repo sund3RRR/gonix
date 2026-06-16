@@ -66,6 +66,7 @@ The runtime must outlive every object it creates or helps construct:
 - `store.Derivation`
 - `eval.Evaluator`
 - `eval.Value`
+- `fetchers.Settings`
 - `flake.Ref`
 - `flake.LockedFlake`
 - `nixpkg.Package`
@@ -93,6 +94,7 @@ Nix noun.
 | `storepath` | `Path` | Independent owned wrapper for `*nix.StorePath`. Does not depend on `store`. |
 | `store` | `Store`, `Derivation`, `Realization`, `Closure` | Store-backed workflows: store metadata, path parsing, derivations, realization, closure traversal, copying. |
 | `eval` | `Evaluator`, `Value`, `ValueType`, builders, realized strings | Evaluation state and values. `Value` lives here because many value operations require an `EvalState`. |
+| `fetchers` | `Settings` | Fetcher settings lifecycle for APIs that fetch or parse flake inputs. |
 | `flake` | `Ref`, `LockedFlake`, parse and lock options | Flake references, locking, and locked output access. |
 | `nixpkg` | `Package` | Later convenience layer around package-shaped Nix values. `package` is a Go keyword. |
 | `internal/status` | `NixError`, `ErrorCode`, `ErrClosed` | Conversion from mutable Nix context errors into stable Go errors. |
@@ -100,9 +102,10 @@ Nix noun.
 
 Import direction must stay one-way:
 
-- root `gonix` may import `store`, `storepath`, `eval`, `flake`, and `nixpkg`;
+- root `gonix` may import `store`, `storepath`, `eval`, `fetchers`, `flake`, and `nixpkg`;
 - `store` may import `storepath`;
 - `eval` may import `store` and `storepath`;
+- `fetchers` imports no public gonix sibling packages;
 - `flake` may import `eval`;
 - `nixpkg` may import `eval`, `store`, and `storepath`;
 - subpackages must not import root `gonix`.
@@ -131,6 +134,7 @@ as `Evaluator.Force(value)` or `Evaluator.Attr(value, name)`.
 | `store.Derivation` | `*nix.NixDerivation` | runtime/store context for JSON and store operations | JSON strings, cloned derivations |
 | `eval.Evaluator` | `*nix.EvalState` | `*store.Store`, runtime context | `*eval.Value` for state-dependent value operations |
 | `eval.Value` | `*nix.NixValue` reference | evaluator identity and context | state-independent getters only; state-dependent operations go through `Evaluator` |
+| `fetchers.Settings` | `*nix.NixFetchersSettings` | runtime context | raw pointer only through `Borrow` escape hatch |
 | `flake.Ref` | `*nix.NixFlakeReference`, fragment string | fetcher/flake settings context | parse options, input override paths |
 | `flake.LockedFlake` | `*nix.NixLockedFlake` | `*eval.Evaluator`, flake settings | lock options, `*flake.Ref`; returns `*eval.Value` outputs |
 | `nixpkg.Package` | usually no raw Nix object; may wrap an `eval.Value` | `*eval.Evaluator`, optional `*store.Store` | package value plus evaluator/store-backed helpers |
@@ -143,6 +147,7 @@ Typical creation surface:
 - `Runtime.Close() error`
 - `Runtime.OpenStore(uri string, opts ...store.Option) (*store.Store, error)`
 - `Runtime.NewEvaluator(store *store.Store, opts ...eval.Option) (*eval.Evaluator, error)`
+- `Runtime.NewFetcherSettings() (*fetchers.Settings, error)`
 - `Runtime.ParseFlakeRef(ref string, opts ...flake.ParseOption) (*flake.Ref, error)`
 - `Runtime.LockFlake(e *eval.Evaluator, ref *flake.Ref, opts ...flake.LockOption) (*flake.LockedFlake, error)`
 
@@ -549,6 +554,7 @@ flowchart TB
 | `eval.Value` | `*nix.NixValue` | owned/refcounted, tied to an evaluator | `ValueDecref` |
 | list/attr builders | raw builders | internal temporary | matching builder free function |
 | realized strings | `*nix.NixRealisedString` | internal temporary | `RealisedStringFree` |
+| `fetchers.Settings` | `*nix.NixFetchersSettings` | owned, borrows runtime context | `FetchersSettingsFree` |
 | `flake.Ref` | `*nix.NixFlakeReference` | owned | `FlakeReferenceFree` |
 | `flake.LockedFlake` | `*nix.NixLockedFlake` | owned, borrows `eval.Evaluator` | `LockedFlakeFree` |
 | `nixpkg.Package` | none directly | wraps or borrows package `eval.Value`; may borrow `store.Store` | no raw free; close owned `Value` if it owns one |
@@ -598,6 +604,7 @@ Expected layout for v1:
 | `eval/ops.go` | State-dependent value operations as `Evaluator` methods. |
 | `eval/builders.go` | Go-to-Nix values, list builders, attr builders. |
 | `eval/realised_string.go` | Realized string conversion and referenced path cloning. |
+| `fetchers/settings.go` | `fetchers.Settings`, constructors, borrow, close. |
 | `flake/ref.go`, `flake/lock.go` | Flake references, parse options, lock options, locked output attrs. |
 | `nixpkg/package.go` | Later package convenience layer. |
 | `internal/status` | Error conversion, error codes, `ErrClosed`. |

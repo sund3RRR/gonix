@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/sund3RRR/gonix/eval"
+	"github.com/sund3RRR/gonix/fetchers"
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/internal/utils"
 	"github.com/sund3RRR/gonix/store"
@@ -118,6 +119,21 @@ func (r *Runtime) NewEvaluator(s *store.Store, opts ...eval.Option) (*eval.Evalu
 
 	r.resources = append(r.resources, e)
 	return e, nil
+}
+
+// NewFetcherSettings creates Nix fetcher settings and tracks them for Runtime.Close.
+func (r *Runtime) NewFetcherSettings() (*fetchers.Settings, error) {
+	if r.ctx == nil {
+		return nil, status.ErrClosed
+	}
+
+	settings, err := fetchers.New(r.ctx)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: new fetcher settings: %w", err)
+	}
+
+	r.resources = append(r.resources, settings)
+	return settings, nil
 }
 
 // Setting returns the current value of a Nix setting.
