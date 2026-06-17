@@ -1,4 +1,4 @@
-package flake
+package flakesettings
 
 import (
 	"fmt"
@@ -16,12 +16,12 @@ type Settings struct {
 	ptr *nix.NixFlakeSettings
 }
 
-// NewSettings creates flake settings using an initialized Nix context.
+// New creates flake settings using an initialized Nix context.
 //
 // The returned Settings owns the raw Nix flake settings handle and must be
 // closed by the caller. The ctx argument is borrowed and must remain valid for
 // as long as the Settings is used.
-func NewSettings(ctx *nix.NixCContext) (*Settings, error) {
+func New(ctx *nix.NixCContext) (*Settings, error) {
 	ptr := nix.FlakeSettingsNew(ctx)
 	if ptr == nil {
 		return nil, fmt.Errorf("flake: failed to create settings: %w", status.FromContext(ctx))

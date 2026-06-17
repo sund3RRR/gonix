@@ -8,6 +8,7 @@ import (
 	"github.com/sund3RRR/gonix/eval"
 	"github.com/sund3RRR/gonix/fetchers"
 	"github.com/sund3RRR/gonix/flake"
+	"github.com/sund3RRR/gonix/flakesettings"
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/store"
 	nix "github.com/sund3RRR/nix-go-bindings"
@@ -22,7 +23,7 @@ import (
 type Runtime struct {
 	ctx                  *nix.NixCContext
 	flakeFetcherSettings *fetchers.Settings
-	flakeSettings        *flake.Settings
+	flakeSettings        *flakesettings.Settings
 	resources            []io.Closer
 }
 
@@ -80,8 +81,8 @@ func NewRuntime(opts ...Option) (*Runtime, error) {
 	r.resources = append(r.resources, fetcherSettings)
 
 	// Init nix libflake
-	var flakeSettings *flake.Settings
-	flakeSettings, err = flake.NewSettings(r.ctx)
+	var flakeSettings *flakesettings.Settings
+	flakeSettings, err = flakesettings.New(r.ctx)
 	if err != nil {
 		return nil, fmt.Errorf("runtime: failed to create flake settings: %w", err)
 	}

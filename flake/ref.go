@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/fetchers"
+	"github.com/sund3RRR/gonix/flakesettings"
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/internal/utils"
 	nix "github.com/sund3RRR/nix-go-bindings"
@@ -28,7 +29,7 @@ type Ref struct {
 func NewParsedRef(
 	ctx *nix.NixCContext,
 	fetchSettings *fetchers.Settings,
-	flakeSettings *Settings,
+	flakeSettings *flakesettings.Settings,
 	ref string,
 	opts ...ParseOption,
 ) (*Ref, error) {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/sund3RRR/gonix/eval"
 	"github.com/sund3RRR/gonix/fetchers"
+	"github.com/sund3RRR/gonix/flakesettings"
 	"github.com/sund3RRR/gonix/internal/status"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
@@ -30,7 +31,7 @@ const (
 // methods that need the raw locked flake return status.ErrClosed after Close.
 type LockedFlake struct {
 	ctx           *nix.NixCContext
-	flakeSettings *Settings
+	flakeSettings *flakesettings.Settings
 	evaluator     *eval.Evaluator
 	ptr           *nix.NixLockedFlake
 }
@@ -43,7 +44,7 @@ type LockedFlake struct {
 func NewLockedFlake(
 	ctx *nix.NixCContext,
 	fetchSettings *fetchers.Settings,
-	flakeSettings *Settings,
+	flakeSettings *flakesettings.Settings,
 	evaluator *eval.Evaluator,
 	ref *Ref,
 	opts ...LockOption,

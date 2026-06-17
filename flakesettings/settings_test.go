@@ -1,4 +1,4 @@
-package flake
+package flakesettings
 
 import (
 	"errors"
@@ -40,7 +40,7 @@ func requireClosedError(t *testing.T, err error) {
 func TestNewSettings(t *testing.T) {
 	ctx := newTestContext(t)
 
-	settings, err := NewSettings(ctx)
+	settings, err := New(ctx)
 	if err != nil {
 		t.Fatalf("NewSettings() error = %v", err)
 	}
@@ -62,7 +62,7 @@ func TestNewSettings(t *testing.T) {
 func TestSettingsClose(t *testing.T) {
 	ctx := newTestContext(t)
 
-	settings, err := NewSettings(ctx)
+	settings, err := New(ctx)
 	if err != nil {
 		t.Fatalf("NewSettings() error = %v", err)
 	}
