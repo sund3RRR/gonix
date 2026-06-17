@@ -24,8 +24,8 @@ type fetchPackageConfig struct {
 }
 
 // WithFetchPackageSystem overrides the package system for one FetchPackage call.
-func WithFetchPackageSystem(system SystemIdent) FetchPackageOption {
+func WithFetchPackageSystem(system string) FetchPackageOption {
 	return func(c *fetchPackageConfig) {
-		c.system = string(system)
+		c.system = system
 	}
 }

@@ -85,13 +85,13 @@ func (r *Runtime) SetMaxJobsAuto() error {
 }
 
 // SetSystem sets the Nix build system.
-func (r *Runtime) SetSystem(system SystemIdent) error {
-	return r.SetSetting(settingSystem, string(system))
+func (r *Runtime) SetSystem(system string) error {
+	return r.SetSetting(settingSystem, system)
 }
 
 // SetEvalSystem sets the Nix evaluation system.
-func (r *Runtime) SetEvalSystem(system SystemIdent) error {
-	return r.SetSetting(settingEvalSystem, string(system))
+func (r *Runtime) SetEvalSystem(system string) error {
+	return r.SetSetting(settingEvalSystem, system)
 }
 
 // SetSubstituters sets the substituter store URLs.

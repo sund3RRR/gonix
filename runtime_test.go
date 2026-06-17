@@ -637,7 +637,7 @@ func TestClientFetchPackage(t *testing.T) {
 		t.Fatalf("Client.LockFlake() error = %v", err)
 	}
 
-	pkg, err := c.FetchPackage(locked, "demo", WithFetchPackageSystem(SystemX8664Linux))
+	pkg, err := c.FetchPackage(locked, "demo", WithFetchPackageSystem(MakeSystem(OSLinux, ArchX86_64)))
 	if err != nil {
 		t.Fatalf("Client.FetchPackage() error = %v", err)
 	}

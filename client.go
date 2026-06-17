@@ -57,7 +57,7 @@ func NewClient(r *Runtime, opts ...ClientOption) (*Client, error) {
 	if cfg.store != nil {
 		c.store = cfg.store
 	} else {
-		c.store, err = r.OpenStore("local", store.WithReadOnly(true))
+		c.store, err = r.OpenStore(store.Auto, store.WithReadOnly(true))
 		if err != nil {
 			return nil, fmt.Errorf("client: open store: %w", err)
 		}

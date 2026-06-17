@@ -140,7 +140,7 @@ func TestRuntimeTypedSettingOptions(t *testing.T) {
 			opts: []Option{
 				WithCores(2),
 				WithMaxJobs(1),
-				WithSystem(SystemX8664Linux),
+				WithSystem(MakeSystem(OSLinux, ArchX86_64)),
 			},
 			run: func(t *testing.T, r *Runtime) {
 				t.Helper()
@@ -199,7 +199,7 @@ func TestRuntimeTypedSettingOptions(t *testing.T) {
 		{
 			name: "eval_system_is_not_registered_by_current_runtime_init",
 			opts: []Option{
-				WithEvalSystem(SystemX8664Linux),
+				WithEvalSystem(MakeSystem(OSLinux, ArchX86_64)),
 			},
 			wantErr: true,
 		},
@@ -303,12 +303,12 @@ func TestRuntimeTypedSettingSetters(t *testing.T) {
 	}
 	requireSettingNotEmpty(t, r, "max-jobs")
 
-	if err := r.SetSystem(SystemX8664Linux); err != nil {
+	if err := r.SetSystem(MakeSystem(OSLinux, ArchX86_64)); err != nil {
 		t.Fatalf("Runtime.SetSystem() error = %v", err)
 	}
 	requireSetting(t, r, "system", "x86_64-linux")
 
-	if err := r.SetEvalSystem(SystemX8664Linux); err == nil {
+	if err := r.SetEvalSystem(MakeSystem(OSLinux, ArchX86_64)); err == nil {
 		t.Fatal("Runtime.SetEvalSystem() error = nil, want error")
 	}
 
@@ -353,8 +353,8 @@ func TestRuntimeSettingsMethodsAfterClose(t *testing.T) {
 	requireRuntimeClosedError(t, r.SetCores(2))
 	requireRuntimeClosedError(t, r.SetMaxJobs(1))
 	requireRuntimeClosedError(t, r.SetMaxJobsAuto())
-	requireRuntimeClosedError(t, r.SetSystem(SystemX8664Linux))
-	requireRuntimeClosedError(t, r.SetEvalSystem(SystemX8664Linux))
+	requireRuntimeClosedError(t, r.SetSystem(MakeSystem(OSLinux, ArchX86_64)))
+	requireRuntimeClosedError(t, r.SetEvalSystem(MakeSystem(OSLinux, ArchX86_64)))
 	requireRuntimeClosedError(t, r.SetSubstituters("https://cache.nixos.org/"))
 	requireRuntimeClosedError(t, r.SetTrustedPublicKeys("cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="))
 	requireRuntimeClosedError(t, r.SetPureEval(true))

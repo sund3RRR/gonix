@@ -161,12 +161,15 @@ func DefaultSystem() string {
 	if runtime.GOOS == "js" && runtime.GOARCH == "wasm" {
 		return fmt.Sprintf("%s-%s", ArchJavascript, OSGHCJS)
 	}
-
-	return fmt.Sprintf("%s-%s", getArch(), getOS())
+	return MakeSystem(makeOS(runtime.GOOS), makeArch(runtime.GOARCH))
 }
 
-func getOS() OS {
-	switch runtime.GOOS {
+func MakeSystem(os OS, arch Arch) string {
+	return fmt.Sprintf("%s-%s", arch, os)
+}
+
+func makeOS(os string) OS {
+	switch os {
 	case "aix":
 		return OSAIX
 	case "android":
@@ -198,12 +201,12 @@ func getOS() OS {
 	case "windows":
 		return OSWindows
 	default:
-		return OS(runtime.GOOS)
+		return OS(os)
 	}
 }
 
-func getArch() Arch {
-	switch runtime.GOARCH {
+func makeArch(arch string) Arch {
+	switch arch {
 	case "386":
 		return ArchI686
 	case "amd64":
@@ -233,6 +236,6 @@ func getArch() Arch {
 	case "wasm":
 		return ArchWasm32
 	default:
-		return Arch(runtime.GOARCH)
+		return Arch(arch)
 	}
 }

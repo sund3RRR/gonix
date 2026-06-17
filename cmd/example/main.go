@@ -32,7 +32,7 @@ func main() {
 	}
 	fmt.Printf("experimental-features: %s\n", features)
 
-	s, err := r.OpenStore(gonix.DefaultStoreDir, store.WithReadOnly(true))
+	s, err := r.OpenStore(store.DefaultDir, store.WithReadOnly(true))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func main() {
 		fmt.Printf("store version: %s\n", version)
 	}
 
-	pathText := gonix.DefaultStoreDir + "/00000000000000000000000000000000-demo"
+	pathText := store.DefaultDir + "/00000000000000000000000000000000-demo"
 	if len(os.Args) > 1 {
 		pathText = os.Args[1]
 	}

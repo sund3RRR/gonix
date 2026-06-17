@@ -75,35 +75,6 @@ const (
 	ExperimentalFeatureCADerivations ExperimentalFeature = "ca-derivations"
 )
 
-// SystemIdent is a Go-native Nix system identifier.
-//
-// The type is open: cast a string to SystemIdent to use custom or future Nix system
-// names.
-type SystemIdent string
-
-const (
-	// SystemX8664Linux is the x86_64-linux Nix system.
-	SystemX8664Linux SystemIdent = "x86_64-linux"
-
-	// SystemX8664Darwin is the x86_64-darwin Nix system.
-	SystemX8664Darwin SystemIdent = "x86_64-darwin"
-
-	// SystemI686Linux is the i686-linux Nix system.
-	SystemI686Linux SystemIdent = "i686-linux"
-
-	// SystemAarch64Linux is the aarch64-linux Nix system.
-	SystemAarch64Linux SystemIdent = "aarch64-linux"
-
-	// SystemAarch64Darwin is the aarch64-darwin Nix system.
-	SystemAarch64Darwin SystemIdent = "aarch64-darwin"
-
-	// SystemArmv6lLinux is the armv6l-linux Nix system.
-	SystemArmv6lLinux SystemIdent = "armv6l-linux"
-
-	// SystemArmv7lLinux is the armv7l-linux Nix system.
-	SystemArmv7lLinux SystemIdent = "armv7l-linux"
-)
-
 // Option configures Runtime creation.
 type Option func(*runtimeConfig)
 
@@ -207,16 +178,16 @@ func WithMaxJobsAuto() Option {
 }
 
 // WithSystem sets the Nix build system.
-func WithSystem(system SystemIdent) Option {
+func WithSystem(system string) Option {
 	return func(c *runtimeConfig) {
-		c.setSetting(settingSystem, string(system))
+		c.setSetting(settingSystem, system)
 	}
 }
 
 // WithEvalSystem sets the Nix evaluation system.
-func WithEvalSystem(system SystemIdent) Option {
+func WithEvalSystem(system string) Option {
 	return func(c *runtimeConfig) {
-		c.setSetting(settingEvalSystem, string(system))
+		c.setSetting(settingEvalSystem, system)
 	}
 }
 
