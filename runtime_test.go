@@ -653,7 +653,7 @@ func TestClientFetchPackage(t *testing.T) {
 	if pkg.Meta.Platforms[0].Arch != ArchX86_64 || pkg.Meta.Platforms[0].OS != OSLinux {
 		t.Fatalf("platforms = %#v", pkg.Meta.Platforms)
 	}
-	if pkg.Src.URL != "https://example.invalid/demo.tar.gz" || pkg.Src.Sha256 != "sha256-demo" {
+	if pkg.Src.Type != SourceTypeURL || pkg.Src.URL != "https://example.invalid/demo.tar.gz" || pkg.Src.Hash != "sha256-demo" {
 		t.Fatalf("src = %#v", pkg.Src)
 	}
 }

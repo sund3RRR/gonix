@@ -57,7 +57,6 @@ let
       text = asString value;
       matched = builtins.match "(.+)-([^-]+)" text;
     in {
-      name = text;
       system = text;
       arch = if matched == null then "" else builtins.elemAt matched 0;
       os = if matched == null then "" else builtins.elemAt matched 1;
@@ -106,6 +105,11 @@ let
 
   sourceProvenanceName = item:
     if builtins.isAttrs item then asString (getAttr "shortName" "" item) else asString item;
+
+  sourceHash =
+    let hash = asString (getAttr "hash" "" src);
+        sha256 = asString (getAttr "sha256" "" src);
+    in if hash != "" then hash else sha256;
 
   outputNames =
     let names = getAttr "outputs" [] pkg;
@@ -157,8 +161,7 @@ in {
     ref = asString (getAttr "ref" "" src);
     owner = asString (getAttr "owner" "" src);
     repo = asString (getAttr "repo" "" src);
-    hash = asString (getAttr "hash" "" src);
-    sha256 = asString (getAttr "sha256" "" src);
+    hash = sourceHash;
   };
 
   meta = {

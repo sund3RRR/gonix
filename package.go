@@ -4,32 +4,36 @@ package gonix
 type PackageType string
 
 const (
-	// PackageTypeSource identifies a source-like package value.
-	PackageTypeSource PackageType = "source"
 	// PackageTypeDerivation identifies a derivation-like package value.
 	PackageTypeDerivation PackageType = "derivation"
 	// PackageTypeApp identifies a flake app value.
 	PackageTypeApp PackageType = "app"
-	// PackageTypePath identifies a path source value.
-	PackageTypePath PackageType = "path"
-	// PackageTypeGit identifies a Git source value.
-	PackageTypeGit PackageType = "git"
-	// PackageTypeGitHub identifies a GitHub source value.
-	PackageTypeGitHub PackageType = "github"
-	// PackageTypeGitLab identifies a GitLab source value.
-	PackageTypeGitLab PackageType = "gitlab"
-	// PackageTypeSourceHut identifies a SourceHut source value.
-	PackageTypeSourceHut PackageType = "sourcehut"
-	// PackageTypeMercurial identifies a Mercurial source value.
-	PackageTypeMercurial PackageType = "mercurial"
-	// PackageTypeTarball identifies a tarball source value.
-	PackageTypeTarball PackageType = "tarball"
-	// PackageTypeFile identifies a single-file source value.
-	PackageTypeFile PackageType = "file"
-	// PackageTypeURL identifies a URL source value.
-	PackageTypeURL PackageType = "url"
-	// PackageTypeIndirect identifies an indirect flake reference value.
-	PackageTypeIndirect PackageType = "indirect"
+)
+
+// SourceType identifies the broad kind of a source-shaped value.
+type SourceType string
+
+const (
+	// SourceTypePath identifies a path source value.
+	SourceTypePath SourceType = "path"
+	// SourceTypeGit identifies a Git source value.
+	SourceTypeGit SourceType = "git"
+	// SourceTypeGitHub identifies a GitHub source value.
+	SourceTypeGitHub SourceType = "github"
+	// SourceTypeGitLab identifies a GitLab source value.
+	SourceTypeGitLab SourceType = "gitlab"
+	// SourceTypeSourceHut identifies a SourceHut source value.
+	SourceTypeSourceHut SourceType = "sourcehut"
+	// SourceTypeMercurial identifies a Mercurial source value.
+	SourceTypeMercurial SourceType = "mercurial"
+	// SourceTypeTarball identifies a tarball source value.
+	SourceTypeTarball SourceType = "tarball"
+	// SourceTypeFile identifies a single-file source value.
+	SourceTypeFile SourceType = "file"
+	// SourceTypeURL identifies a URL source value.
+	SourceTypeURL SourceType = "url"
+	// SourceTypeIndirect identifies an indirect flake reference value.
+	SourceTypeIndirect SourceType = "indirect"
 )
 
 // Package describes the common public shape of an evaluated Nix package.
@@ -53,13 +57,6 @@ type Package struct {
 	Src        Source                   `nix:"src" validate:"optional"`
 	Meta       PackageMeta              `nix:"meta" validate:"optional"`
 	Outputs    map[string]PackageOutput `nix:"outputs" validate:"required"`
-}
-
-// System describes a parsed Nix system string.
-type System struct {
-	Name string `nix:"name" validate:"optional"`
-	Arch Arch   `nix:"arch" validate:"optional"`
-	OS   OS     `nix:"os" validate:"optional"`
 }
 
 // PackageOutput describes a named output attribute of an evaluated package.
@@ -110,7 +107,6 @@ type License struct {
 
 // Platform describes a parsed nixpkgs platform system entry.
 type Platform struct {
-	Name   string `nix:"name" validate:"optional"`
 	System string `nix:"system" validate:"optional"`
 	Arch   Arch   `nix:"arch" validate:"optional"`
 	OS     OS     `nix:"os" validate:"optional"`
@@ -134,16 +130,15 @@ type MaintainerKey struct {
 
 // Source describes the common source fetcher result shape attached to src.
 type Source struct {
-	Type    string   `nix:"type" validate:"optional"`
-	Name    string   `nix:"name" validate:"optional"`
-	OutPath string   `nix:"outPath" validate:"optional"`
-	DrvPath string   `nix:"drvPath" validate:"optional"`
-	URL     string   `nix:"url" validate:"optional"`
-	Rev     string   `nix:"rev" validate:"optional"`
-	Ref     string   `nix:"ref" validate:"optional"`
-	Owner   string   `nix:"owner" validate:"optional"`
-	Repo    string   `nix:"repo" validate:"optional"`
-	Hash    string   `nix:"hash" validate:"optional"`
-	URLs    []string `nix:"urls" validate:"optional"`
-	Sha256  string   `nix:"sha256" validate:"optional"`
+	Type    SourceType `nix:"type" validate:"optional"`
+	Name    string     `nix:"name" validate:"optional"`
+	OutPath string     `nix:"outPath" validate:"optional"`
+	DrvPath string     `nix:"drvPath" validate:"optional"`
+	URL     string     `nix:"url" validate:"optional"`
+	Rev     string     `nix:"rev" validate:"optional"`
+	Ref     string     `nix:"ref" validate:"optional"`
+	Owner   string     `nix:"owner" validate:"optional"`
+	Repo    string     `nix:"repo" validate:"optional"`
+	Hash    string     `nix:"hash" validate:"optional"`
+	URLs    []string   `nix:"urls" validate:"optional"`
 }
