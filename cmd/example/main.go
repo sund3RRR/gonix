@@ -11,7 +11,7 @@ import (
 func main() {
 	const storeURI = store.Auto
 	const flakeRef = "github:NixOS/nixpkgs/nixos-unstable"
-	const readOnly = true
+	const readOnly = false
 	var system = gonix.DefaultSystem()
 
 	// Create a new gonix Runtime
@@ -19,7 +19,6 @@ func main() {
 		gonix.WithExperimentalFeatures(
 			gonix.ExperimentalFeatureNixCommand,
 			gonix.ExperimentalFeatureFlakes,
-			gonix.ExperimentalFeature("read-only-local-store"),
 		),
 		gonix.WithVerbosity(gonix.VerbosityWarn),
 		gonix.WithLogFormat(gonix.LogFormatRaw),
@@ -32,7 +31,7 @@ func main() {
 	}()
 
 	// Open a read-only store
-	s, err := r.OpenStore(storeURI, store.WithReadOnly(readOnly))
+	s, err := r.OpenStore(storeURI)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -59,8 +58,8 @@ func main() {
 
 	// Fetch and print packages
 	fmt.Printf("flake=%s system=%s store=%s readOnly=%t\n", flakeRef, system, storeURI, readOnly)
-	for _, name := range []string{"hello", "git", "kubectl", "openssl"} {
-		pkg, err := c.FetchPackage(locked, name, gonix.WithFetchPackageSystem(system))
+	for _, name := range []string{"btop", "git", "kubectl", "openssl"} {
+		pkg, err := c.FetchPackage(locked, name)
 		if err != nil {
 			fmt.Printf("FAIL %-18s %v\n", name, err)
 			return
