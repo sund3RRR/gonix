@@ -43,29 +43,29 @@ const (
 // value. drvPath points to the generated .drv build plan and outPath points to
 // the default realized output path.
 type Package struct {
-	Type       PackageType              `nix:"type" validate:"optional"`
-	Name       string                   `nix:"name" validate:"optional"`
-	PName      string                   `nix:"pname" validate:"optional"`
-	Version    string                   `nix:"version" validate:"optional"`
-	System     string                   `nix:"system" validate:"optional"`
-	Builder    string                   `nix:"builder" validate:"optional"`
-	Args       []string                 `nix:"args" validate:"optional"`
-	DrvPath    string                   `nix:"drvPath" validate:"optional"`
-	OutPath    string                   `nix:"outPath" validate:"optional"`
-	OutputName string                   `nix:"outputName" validate:"optional"`
-	Position   string                   `nix:"pos" validate:"optional"`
-	Src        Source                   `nix:"src" validate:"optional"`
-	Meta       PackageMeta              `nix:"meta" validate:"optional"`
-	Outputs    map[string]PackageOutput `nix:"outputs" validate:"required"`
+	Type       PackageType              `nix:"type" json:"type" validate:"optional"`
+	Name       string                   `nix:"name" json:"name" validate:"optional"`
+	PName      string                   `nix:"pname" json:"pname" validate:"optional"`
+	Version    string                   `nix:"version" json:"version" validate:"optional"`
+	System     string                   `nix:"system" json:"system" validate:"optional"`
+	Builder    string                   `nix:"builder" json:"builder" validate:"optional"`
+	Args       []string                 `nix:"args" json:"args" validate:"optional"`
+	DrvPath    string                   `nix:"drvPath" json:"drvPath" validate:"optional"`
+	OutPath    string                   `nix:"outPath" json:"outPath" validate:"optional"`
+	OutputName string                   `nix:"outputName" json:"outputName" validate:"optional"`
+	Position   string                   `nix:"pos" json:"pos" validate:"optional"`
+	Src        Source                   `nix:"src" json:"src" validate:"optional"`
+	Meta       PackageMeta              `nix:"meta" json:"meta" validate:"optional"`
+	Outputs    map[string]PackageOutput `nix:"outputs" json:"outputs" validate:"required"`
 }
 
 // PackageOutput describes a named output attribute of an evaluated package.
 type PackageOutput struct {
-	Type       PackageType `nix:"type" validate:"optional"`
-	Name       string      `nix:"name" validate:"optional"`
-	DrvPath    string      `nix:"drvPath" validate:"optional"`
-	OutPath    string      `nix:"outPath" validate:"optional"`
-	OutputName string      `nix:"outputName" validate:"optional"`
+	Type       PackageType `nix:"type" json:"type" validate:"optional"`
+	Name       string      `nix:"name" json:"name" validate:"optional"`
+	DrvPath    string      `nix:"drvPath" json:"drvPath" validate:"optional"`
+	OutPath    string      `nix:"outPath" json:"outPath" validate:"optional"`
+	OutputName string      `nix:"outputName" json:"outputName" validate:"optional"`
 }
 
 // PackageMeta describes the conventional nixpkgs meta attribute set.
@@ -74,71 +74,71 @@ type PackageOutput struct {
 // every package to define them. The package projection normalizes richer
 // nixpkgs metadata into this stable Go-native surface.
 type PackageMeta struct {
-	Broken               bool         `nix:"broken" validate:"optional"`
-	Unfree               bool         `nix:"unfree" validate:"optional"`
-	Insecure             bool         `nix:"insecure" validate:"optional"`
-	Unsupported          bool         `nix:"unsupported" validate:"optional"`
-	Available            bool         `nix:"available" validate:"optional"`
-	Description          string       `nix:"description" validate:"optional"`
-	LongDescription      string       `nix:"longDescription" validate:"optional"`
-	Homepage             string       `nix:"homepage" validate:"optional"`
-	DownloadPage         string       `nix:"downloadPage" validate:"optional"`
-	Changelog            string       `nix:"changelog" validate:"optional"`
-	MainProgram          string       `nix:"mainProgram" validate:"optional"`
-	Position             string       `nix:"position" validate:"optional"`
-	KnownVulnerabilities []string     `nix:"knownVulnerabilities" validate:"optional"`
-	SourceProvenance     []string     `nix:"sourceProvenance" validate:"optional"`
-	License              []License    `nix:"license" validate:"optional"`
-	Maintainers          []Maintainer `nix:"maintainers" validate:"optional"`
-	Platforms            []Platform   `nix:"platforms" validate:"optional"`
-	BadPlatforms         []Platform   `nix:"badPlatforms" validate:"optional"`
+	Broken               bool         `nix:"broken" json:"broken" validate:"optional"`
+	Unfree               bool         `nix:"unfree" json:"unfree" validate:"optional"`
+	Insecure             bool         `nix:"insecure" json:"insecure" validate:"optional"`
+	Unsupported          bool         `nix:"unsupported" json:"unsupported" validate:"optional"`
+	Available            bool         `nix:"available" json:"available" validate:"optional"`
+	Description          string       `nix:"description" json:"description" validate:"optional"`
+	LongDescription      string       `nix:"longDescription" json:"longDescription" validate:"optional"`
+	Homepage             string       `nix:"homepage" json:"homepage" validate:"optional"`
+	DownloadPage         string       `nix:"downloadPage" json:"downloadPage" validate:"optional"`
+	Changelog            string       `nix:"changelog" json:"changelog" validate:"optional"`
+	MainProgram          string       `nix:"mainProgram" json:"mainProgram" validate:"optional"`
+	Position             string       `nix:"position" json:"position" validate:"optional"`
+	KnownVulnerabilities []string     `nix:"knownVulnerabilities" json:"knownVulnerabilities" validate:"optional"`
+	SourceProvenance     []string     `nix:"sourceProvenance" json:"sourceProvenance" validate:"optional"`
+	License              []License    `nix:"license" json:"license" validate:"optional"`
+	Maintainers          []Maintainer `nix:"maintainers" json:"maintainers" validate:"optional"`
+	Platforms            []Platform   `nix:"platforms" json:"platforms" validate:"optional"`
+	BadPlatforms         []Platform   `nix:"badPlatforms" json:"badPlatforms" validate:"optional"`
 }
 
 // License describes a nixpkgs lib.licenses entry.
 type License struct {
-	Free            bool   `nix:"free" validate:"optional"`
-	Redistributable bool   `nix:"redistributable" validate:"optional"`
-	Deprecated      bool   `nix:"deprecated" validate:"optional"`
-	ShortName       string `nix:"shortName" validate:"optional"`
-	FullName        string `nix:"fullName" validate:"optional"`
-	SpdxID          string `nix:"spdxId" validate:"optional"`
-	URL             string `nix:"url" validate:"optional"`
+	Free            bool   `nix:"free" json:"free" validate:"optional"`
+	Redistributable bool   `nix:"redistributable" json:"redistributable" validate:"optional"`
+	Deprecated      bool   `nix:"deprecated" json:"deprecated" validate:"optional"`
+	ShortName       string `nix:"shortName" json:"shortName" validate:"optional"`
+	FullName        string `nix:"fullName" json:"fullName" validate:"optional"`
+	SpdxID          string `nix:"spdxId" json:"spdxId" validate:"optional"`
+	URL             string `nix:"url" json:"url" validate:"optional"`
 }
 
 // Platform describes a parsed nixpkgs platform system entry.
 type Platform struct {
-	System string `nix:"system" validate:"optional"`
-	Arch   Arch   `nix:"arch" validate:"optional"`
-	OS     OS     `nix:"os" validate:"optional"`
+	System string `nix:"system" json:"system" validate:"optional"`
+	Arch   Arch   `nix:"arch" json:"arch" validate:"optional"`
+	OS     OS     `nix:"os" json:"os" validate:"optional"`
 }
 
 // Maintainer describes a nixpkgs lib.maintainers entry.
 type Maintainer struct {
-	Name   string          `nix:"name" validate:"optional"`
-	Email  string          `nix:"email" validate:"optional"`
-	GitHub string          `nix:"github" validate:"optional"`
-	GitLab string          `nix:"gitlab" validate:"optional"`
-	Matrix string          `nix:"matrix" validate:"optional"`
-	Keys   []MaintainerKey `nix:"keys" validate:"optional"`
+	Name   string          `nix:"name" json:"name" validate:"optional"`
+	Email  string          `nix:"email" json:"email" validate:"optional"`
+	GitHub string          `nix:"github" json:"github" validate:"optional"`
+	GitLab string          `nix:"gitlab" json:"gitlab" validate:"optional"`
+	Matrix string          `nix:"matrix" json:"matrix" validate:"optional"`
+	Keys   []MaintainerKey `nix:"keys" json:"keys" validate:"optional"`
 }
 
 // MaintainerKey describes a nixpkgs maintainer OpenPGP key entry.
 type MaintainerKey struct {
-	Fingerprint string `nix:"fingerprint" validate:"optional"`
-	LongKeyID   string `nix:"longkeyid" validate:"optional"`
+	Fingerprint string `nix:"fingerprint" json:"fingerprint" validate:"optional"`
+	LongKeyID   string `nix:"longkeyid" json:"longkeyid" validate:"optional"`
 }
 
 // Source describes the common source fetcher result shape attached to src.
 type Source struct {
-	Type    SourceType `nix:"type" validate:"optional"`
-	Name    string     `nix:"name" validate:"optional"`
-	OutPath string     `nix:"outPath" validate:"optional"`
-	DrvPath string     `nix:"drvPath" validate:"optional"`
-	URL     string     `nix:"url" validate:"optional"`
-	Rev     string     `nix:"rev" validate:"optional"`
-	Ref     string     `nix:"ref" validate:"optional"`
-	Owner   string     `nix:"owner" validate:"optional"`
-	Repo    string     `nix:"repo" validate:"optional"`
-	Hash    string     `nix:"hash" validate:"optional"`
-	URLs    []string   `nix:"urls" validate:"optional"`
+	Type    SourceType `nix:"type" json:"type" validate:"optional"`
+	Name    string     `nix:"name" json:"name" validate:"optional"`
+	OutPath string     `nix:"outPath" json:"outPath" validate:"optional"`
+	DrvPath string     `nix:"drvPath" json:"drvPath" validate:"optional"`
+	URL     string     `nix:"url" json:"url" validate:"optional"`
+	Rev     string     `nix:"rev" json:"rev" validate:"optional"`
+	Ref     string     `nix:"ref" json:"ref" validate:"optional"`
+	Owner   string     `nix:"owner" json:"owner" validate:"optional"`
+	Repo    string     `nix:"repo" json:"repo" validate:"optional"`
+	Hash    string     `nix:"hash" json:"hash" validate:"optional"`
+	URLs    []string   `nix:"urls" json:"urls" validate:"optional"`
 }
