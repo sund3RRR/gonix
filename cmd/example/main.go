@@ -1,17 +1,20 @@
 package main
 
 import (
-	"encoding/hex"
-	"errors"
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/sund3RRR/gonix"
 	"github.com/sund3RRR/gonix/store"
 )
 
 func main() {
+	const storeURI = store.Auto
+	const flakeRef = "github:NixOS/nixpkgs/nixos-unstable"
+	const readOnly = true
+	var system = gonix.DefaultSystem()
+
+	// Create a new gonix Runtime
 	r, err := gonix.NewRuntime(
 		gonix.WithExperimentalFeatures(
 			gonix.ExperimentalFeatureNixCommand,
@@ -24,89 +27,42 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer closeResource("runtime", r.Close)
+	defer r.Close()
 
-	features, err := r.Setting("experimental-features")
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("experimental-features: %s\n", features)
-
-	s, err := r.OpenStore(store.DefaultDir, store.WithReadOnly(true))
+	// Open a read-only store
+	s, err := r.OpenStore(storeURI, store.WithReadOnly(readOnly))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	uri, err := s.URI()
+	// Create a new gonix Client with a read-only store
+	c, err := gonix.NewClient(r, gonix.WithClientStore(s))
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("store uri: %s\n", uri)
+	defer c.Close()
 
-	storeDir, err := s.StoreDir()
+	// Parse and lock the flake reference
+	ref, err := c.ParseFlakeRef(flakeRef)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("store dir: %s\n", storeDir)
 
-	version, err := s.Version()
+	locked, err := c.LockFlake(ref)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if version == "" {
-		fmt.Println("store version: unavailable")
-	} else {
-		fmt.Printf("store version: %s\n", version)
-	}
 
-	pathText := store.DefaultDir + "/00000000000000000000000000000000-demo"
-	if len(os.Args) > 1 {
-		pathText = os.Args[1]
-	}
-
-	path, err := s.ParsePath(pathText)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer closeResource("store path", path.Close)
-
-	name, err := path.Name()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("path name: %s\n", name)
-
-	hash, err := path.Hash()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("path hash: %s\n", hex.EncodeToString(hash[:]))
-
-	realPath, err := s.RealPath(path)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("real path: %s\n", realPath)
-
-	valid, err := s.IsValidPath(path)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("valid in local store: %t\n", valid)
-
-	_, err = s.ParsePath("/not/a/nix/store/path")
-	if err != nil {
-		var nixErr *gonix.Error
-		if errors.As(err, &nixErr) {
-			fmt.Printf("structured nix error: code=%s message=%q\n", nixErr.Code, nixErr.Message)
-		} else {
-			fmt.Printf("parse error: %v\n", err)
+	// Fetch and print packages
+	fmt.Printf("flake=%s system=%s store=%s readOnly=%t\n", flakeRef, system, storeURI, readOnly)
+	for _, name := range []string{"hello", "git", "kubectl", "openssl"} {
+		pkg, err := c.FetchPackage(locked, name, gonix.WithFetchPackageSystem(system))
+		if err != nil {
+			fmt.Printf("FAIL %-18s %v\n", name, err)
+			return
 		}
-	}
-}
 
-func closeResource(name string, close func() error) {
-	if err := close(); err != nil {
-		log.Printf("failed to close %s: %v", name, err)
+		fmt.Printf("OK   %-18s name=%q version=%q drvPath=%q outPath=%q outputs=%v\n",
+			name, pkg.Name, pkg.Version, pkg.DrvPath, pkg.OutPath, pkg.Outputs)
 	}
 }
