@@ -305,7 +305,7 @@ func newFlakeTestRuntime(t *testing.T) *Runtime {
 	return r
 }
 
-func newFlakeTestEvaluator(t *testing.T, r *Runtime) *eval.Evaluator {
+func newFlakeTestClient(t *testing.T, r *Runtime) *Client {
 	t.Helper()
 
 	resolvedRoot := realTempDir(t)
@@ -319,15 +319,20 @@ func newFlakeTestEvaluator(t *testing.T, r *Runtime) *eval.Evaluator {
 		store.WithLogDir(filepath.Join(resolvedRoot, "log")),
 	)
 	if err != nil {
-		t.Fatalf("Runtime.OpenStore(local) error = %v", err)
+		t.Fatalf("NewClient() error = %v", err)
 	}
 
-	e, err := r.NewEvaluator(s)
+	c, err := NewClient(r, WithClientStore(s))
 	if err != nil {
-		t.Fatalf("Runtime.NewEvaluator() error = %v", err)
+		t.Fatalf("NewClient() error = %v", err)
 	}
+	t.Cleanup(func() {
+		if err := c.Close(); err != nil {
+			t.Fatalf("Client.Close() error = %v", err)
+		}
+	})
 
-	return e
+	return c
 }
 
 func realTempDir(t *testing.T) string {
@@ -390,6 +395,7 @@ func lockedFlakeHello(t *testing.T, e *eval.Evaluator, locked *flake.LockedFlake
 
 func TestRuntimeParseFlakeRef(t *testing.T) {
 	r := newFlakeTestRuntime(t)
+	c := newFlakeTestClient(t, r)
 
 	root := realTempDir(t)
 	writeTestFlake(t, root, `
@@ -400,13 +406,13 @@ func TestRuntimeParseFlakeRef(t *testing.T) {
 }
 `)
 
-	if _, err := r.ParseFlakeRef(".#hello"); err == nil {
-		t.Fatal("Runtime.ParseFlakeRef(relative without base) error = nil, want error")
+	if _, err := c.ParseFlakeRef(".#hello"); err == nil {
+		t.Fatal("Client.ParseFlakeRef(relative without base) error = nil, want error")
 	}
 
-	ref, err := r.ParseFlakeRef(".#legacyPackages.aarch127-unknown...orion", flake.WithBaseDirectory(root))
+	ref, err := c.ParseFlakeRef(".#legacyPackages.aarch127-unknown...orion", flake.WithBaseDirectory(root))
 	if err != nil {
-		t.Fatalf("Runtime.ParseFlakeRef() error = %v", err)
+		t.Fatalf("Client.ParseFlakeRef() error = %v", err)
 	}
 	if got := ref.Fragment(); got != "legacyPackages.aarch127-unknown...orion" {
 		t.Fatalf("Ref.Fragment() = %q, want legacyPackages.aarch127-unknown...orion", got)
@@ -431,7 +437,7 @@ func TestRuntimeParseFlakeRef(t *testing.T) {
 
 func TestRuntimeLockFlakeOutputAttrsAndModes(t *testing.T) {
 	r := newFlakeTestRuntime(t)
-	e := newFlakeTestEvaluator(t, r)
+	c := newFlakeTestClient(t, r)
 
 	root := realTempDir(t)
 	writeTestFlake(t, filepath.Join(root, "b"), `
@@ -457,19 +463,19 @@ func TestRuntimeLockFlakeOutputAttrsAndModes(t *testing.T) {
 }
 `)
 
-	ref, err := r.ParseFlakeRef("./a", flake.WithBaseDirectory(root))
+	ref, err := c.ParseFlakeRef("./a", flake.WithBaseDirectory(root))
 	if err != nil {
-		t.Fatalf("Runtime.ParseFlakeRef(./a) error = %v", err)
+		t.Fatalf("Client.ParseFlakeRef(./a) error = %v", err)
 	}
 	if got := ref.Fragment(); got != "" {
 		t.Fatalf("Ref.Fragment() = %q, want empty", got)
 	}
 
-	locked, err := r.LockFlake(e, ref)
+	locked, err := c.LockFlake(ref)
 	if err != nil {
-		t.Fatalf("Runtime.LockFlake(default) error = %v", err)
+		t.Fatalf("Client.LockFlake(default) error = %v", err)
 	}
-	if got := lockedFlakeHello(t, e, locked); got != "BOB" {
+	if got := lockedFlakeHello(t, c.evaluator, locked); got != "BOB" {
 		t.Fatalf("default virtual lock hello = %q, want BOB", got)
 	}
 	if _, err := os.Stat(filepath.Join(root, "a", "flake.lock")); !os.IsNotExist(err) {
@@ -485,48 +491,48 @@ func TestRuntimeLockFlakeOutputAttrsAndModes(t *testing.T) {
 		t.Fatalf("LockedFlake.OutputAttrs() after close error = %v, want ErrClosed", err)
 	}
 
-	if _, err := r.LockFlake(e, ref, flake.WithLockMode(flake.LockModeCheck)); err == nil {
-		t.Fatal("Runtime.LockFlake(check before lock exists) error = nil, want error")
+	if _, err := c.LockFlake(ref, flake.WithLockMode(flake.LockModeCheck)); err == nil {
+		t.Fatal("Client.LockFlake(check before lock exists) error = nil, want error")
 	}
 
-	locked, err = r.LockFlake(e, ref, flake.WithLockMode(flake.LockModeWriteAsNeeded))
+	locked, err = c.LockFlake(ref, flake.WithLockMode(flake.LockModeWriteAsNeeded))
 	if err != nil {
-		t.Fatalf("Runtime.LockFlake(write as needed) error = %v", err)
+		t.Fatalf("Client.LockFlake(write as needed) error = %v", err)
 	}
-	if got := lockedFlakeHello(t, e, locked); got != "BOB" {
+	if got := lockedFlakeHello(t, c.evaluator, locked); got != "BOB" {
 		t.Fatalf("write-as-needed lock hello = %q, want BOB", got)
 	}
 	if _, err := os.Stat(filepath.Join(root, "a", "flake.lock")); err != nil {
 		t.Fatalf("written flake.lock stat: %v", err)
 	}
 
-	locked, err = r.LockFlake(e, ref, flake.WithLockMode(flake.LockModeCheck))
+	locked, err = c.LockFlake(ref, flake.WithLockMode(flake.LockModeCheck))
 	if err != nil {
-		t.Fatalf("Runtime.LockFlake(check after write) error = %v", err)
+		t.Fatalf("Client.LockFlake(check after write) error = %v", err)
 	}
-	if got := lockedFlakeHello(t, e, locked); got != "BOB" {
+	if got := lockedFlakeHello(t, c.evaluator, locked); got != "BOB" {
 		t.Fatalf("check lock hello = %q, want BOB", got)
 	}
 
-	overrideRef, err := r.ParseFlakeRef("./c", flake.WithBaseDirectory(root))
+	overrideRef, err := c.ParseFlakeRef("./c", flake.WithBaseDirectory(root))
 	if err != nil {
-		t.Fatalf("Runtime.ParseFlakeRef(./c) error = %v", err)
+		t.Fatalf("Client.ParseFlakeRef(./c) error = %v", err)
 	}
-	locked, err = r.LockFlake(e, ref,
+	locked, err = c.LockFlake(ref,
 		flake.WithLockMode(flake.LockModeWriteAsNeeded),
 		flake.WithInputOverride("b", overrideRef),
 	)
 	if err != nil {
-		t.Fatalf("Runtime.LockFlake(with override) error = %v", err)
+		t.Fatalf("Client.LockFlake(with override) error = %v", err)
 	}
-	if got := lockedFlakeHello(t, e, locked); got != "Claire" {
+	if got := lockedFlakeHello(t, c.evaluator, locked); got != "Claire" {
 		t.Fatalf("override lock hello = %q, want Claire", got)
 	}
 }
 
 func TestRuntimeFlakeErrorsAfterClose(t *testing.T) {
 	r := newFlakeTestRuntime(t)
-	e := newFlakeTestEvaluator(t, r)
+	c := newFlakeTestClient(t, r)
 
 	root := realTempDir(t)
 	writeTestFlake(t, root, `
@@ -537,30 +543,117 @@ func TestRuntimeFlakeErrorsAfterClose(t *testing.T) {
 }
 `)
 
-	ref, err := r.ParseFlakeRef(".", flake.WithBaseDirectory(root))
+	ref, err := c.ParseFlakeRef(".", flake.WithBaseDirectory(root))
 	if err != nil {
-		t.Fatalf("Runtime.ParseFlakeRef() error = %v", err)
+		t.Fatalf("Client.ParseFlakeRef() error = %v", err)
 	}
 	if err := ref.Close(); err != nil {
 		t.Fatalf("Ref.Close() error = %v", err)
 	}
-	if _, err := r.LockFlake(e, ref); !errors.Is(err, ErrClosed) {
-		t.Fatalf("Runtime.LockFlake(closed ref) error = %v, want ErrClosed", err)
+	if _, err := c.LockFlake(ref); !errors.Is(err, ErrClosed) {
+		t.Fatalf("Client.LockFlake(closed ref) error = %v, want ErrClosed", err)
 	}
 
-	ref, err = r.ParseFlakeRef(".", flake.WithBaseDirectory(root))
+	ref, err = c.ParseFlakeRef(".", flake.WithBaseDirectory(root))
 	if err != nil {
-		t.Fatalf("Runtime.ParseFlakeRef() error = %v", err)
+		t.Fatalf("Client.ParseFlakeRef() error = %v", err)
 	}
-	if _, err := r.LockFlake(e, ref, flake.WithLockMode(flake.LockMode(99))); err == nil {
-		t.Fatal("Runtime.LockFlake(invalid mode) error = nil, want error")
+	if _, err := c.LockFlake(ref, flake.WithLockMode(flake.LockMode(99))); err == nil {
+		t.Fatal("Client.LockFlake(invalid mode) error = nil, want error")
 	}
 
-	if err := r.Close(); err != nil {
-		t.Fatalf("Runtime.Close() error = %v", err)
+	if err := c.Close(); err != nil {
+		t.Fatalf("Client.Close() error = %v", err)
 	}
-	_, err = r.ParseFlakeRef(".")
+	_, err = c.ParseFlakeRef(".")
 	requireRuntimeClosedError(t, err)
-	_, err = r.LockFlake(e, ref)
+	_, err = c.LockFlake(ref)
 	requireRuntimeClosedError(t, err)
+}
+
+func TestClientFetchPackage(t *testing.T) {
+	r := newFlakeTestRuntime(t)
+	c := newFlakeTestClient(t, r)
+
+	root := realTempDir(t)
+	writeTestFlake(t, root, `
+{
+  outputs = { ... }: {
+    legacyPackages.x86_64-linux.demo = {
+      type = "derivation";
+      name = "demo-1.0";
+      pname = "demo";
+      version = "1.0";
+      system = "x86_64-linux";
+      builder = "/bin/sh";
+      args = [ "-c" "exit 0" ];
+      drvPath = "/nix/store/00000000000000000000000000000000-demo.drv";
+      outPath = "/nix/store/00000000000000000000000000000000-demo";
+      outputName = "out";
+      outputs = [ "out" "dev" ];
+      out = "/nix/store/00000000000000000000000000000000-demo";
+      dev = "/nix/store/00000000000000000000000000000000-demo-dev";
+      src = {
+        type = "url";
+        url = "https://example.invalid/demo.tar.gz";
+        sha256 = "sha256-demo";
+      };
+      meta = {
+        description = "demo package";
+        homepage = "https://example.invalid/demo";
+        license = {
+          shortName = "mit";
+          fullName = "MIT License";
+          spdxId = "MIT";
+          free = true;
+          redistributable = true;
+        };
+        maintainers = [
+          {
+            name = "Ada";
+            email = "ada@example.invalid";
+          }
+        ];
+        platforms = [ "x86_64-linux" "aarch64-darwin" ];
+        badPlatforms = [ "i686-linux" ];
+        sourceProvenance = [
+          {
+            shortName = "fromSource";
+            isSource = true;
+          }
+        ];
+      };
+    };
+  };
+}
+`)
+
+	ref, err := c.ParseFlakeRef(".", flake.WithBaseDirectory(root))
+	if err != nil {
+		t.Fatalf("Client.ParseFlakeRef() error = %v", err)
+	}
+	locked, err := c.LockFlake(ref)
+	if err != nil {
+		t.Fatalf("Client.LockFlake() error = %v", err)
+	}
+
+	pkg, err := c.FetchPackage(locked, "demo", WithFetchPackageSystem(SystemX8664Linux))
+	if err != nil {
+		t.Fatalf("Client.FetchPackage() error = %v", err)
+	}
+	if pkg.Name != "demo-1.0" || pkg.PName != "demo" || pkg.Version != "1.0" {
+		t.Fatalf("package identity = %#v", pkg)
+	}
+	if pkg.Outputs["dev"].OutPath != "/nix/store/00000000000000000000000000000000-demo-dev" {
+		t.Fatalf("dev output = %#v", pkg.Outputs["dev"])
+	}
+	if pkg.Meta.License[0].SpdxID != "MIT" || pkg.Meta.Maintainers[0].Name != "Ada" {
+		t.Fatalf("meta = %#v", pkg.Meta)
+	}
+	if pkg.Meta.Platforms[0].Arch != ArchX86_64 || pkg.Meta.Platforms[0].OS != OSLinux {
+		t.Fatalf("platforms = %#v", pkg.Meta.Platforms)
+	}
+	if pkg.Src.URL != "https://example.invalid/demo.tar.gz" || pkg.Src.Sha256 != "sha256-demo" {
+		t.Fatalf("src = %#v", pkg.Src)
+	}
 }

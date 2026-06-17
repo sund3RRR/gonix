@@ -240,6 +240,85 @@ func TestEvaluatorUnmarshalNumericAndArray(t *testing.T) {
 	}
 }
 
+func TestEvaluatorUnmarshalMap(t *testing.T) {
+	_, e := newTestEvaluator(t)
+
+	type output struct {
+		Path string `nix:"path" validate:"required"`
+	}
+	type target struct {
+		Outputs map[string]output `nix:"outputs" validate:"required"`
+	}
+
+	value, err := e.NewValue(eval.Attrs(map[string]eval.GoValue{
+		"outputs": eval.Attrs(map[string]eval.GoValue{
+			"dev": eval.Attrs(map[string]eval.GoValue{
+				"path": eval.String("/nix/store/demo-dev"),
+			}),
+			"out": eval.Attrs(map[string]eval.GoValue{
+				"path": eval.String("/nix/store/demo"),
+			}),
+		}),
+	}))
+	if err != nil {
+		t.Fatalf("Evaluator.NewValue(attrs) error = %v", err)
+	}
+
+	var got target
+	if err := e.Unmarshal(value, &got); err != nil {
+		t.Fatalf("Evaluator.Unmarshal(map) error = %v", err)
+	}
+	if got.Outputs["out"].Path != "/nix/store/demo" || got.Outputs["dev"].Path != "/nix/store/demo-dev" {
+		t.Fatalf("Outputs = %#v", got.Outputs)
+	}
+}
+
+func TestEvaluatorUnmarshalMapRequiredMissing(t *testing.T) {
+	_, e := newTestEvaluator(t)
+
+	type output struct {
+		Path string `nix:"path" validate:"required"`
+	}
+	type target struct {
+		Outputs map[string]output `nix:"outputs" validate:"required"`
+	}
+
+	value, err := e.NewValue(eval.Attrs(map[string]eval.GoValue{
+		"outputs": eval.Attrs(map[string]eval.GoValue{
+			"out": eval.Attrs(map[string]eval.GoValue{}),
+		}),
+	}))
+	if err != nil {
+		t.Fatalf("Evaluator.NewValue(attrs) error = %v", err)
+	}
+
+	var got target
+	err = e.Unmarshal(value, &got)
+	var missing *eval.MissingAttrError
+	if !errors.As(err, &missing) {
+		t.Fatalf("Evaluator.Unmarshal(map missing) error = %v, want MissingAttrError", err)
+	}
+	if missing.Path != "$.outputs.out.path" {
+		t.Fatalf("MissingAttrError.Path = %q, want $.outputs.out.path", missing.Path)
+	}
+}
+
+func TestEvaluatorUnmarshalMapNonStringKey(t *testing.T) {
+	_, e := newTestEvaluator(t)
+
+	value, err := e.NewValue(eval.Attrs(map[string]eval.GoValue{}))
+	if err != nil {
+		t.Fatalf("Evaluator.NewValue(attrs) error = %v", err)
+	}
+
+	var got map[int]string
+	err = e.Unmarshal(value, &got)
+	var unsupported *eval.UnsupportedTypeError
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("Evaluator.Unmarshal(map non-string key) error = %v, want UnsupportedTypeError", err)
+	}
+}
+
 func TestEvaluatorUnmarshalLifecycleAndOriginValidation(t *testing.T) {
 	r, e := newTestEvaluator(t)
 

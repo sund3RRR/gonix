@@ -85,12 +85,12 @@ func (r *Runtime) SetMaxJobsAuto() error {
 }
 
 // SetSystem sets the Nix build system.
-func (r *Runtime) SetSystem(system System) error {
+func (r *Runtime) SetSystem(system SystemIdent) error {
 	return r.SetSetting(settingSystem, string(system))
 }
 
 // SetEvalSystem sets the Nix evaluation system.
-func (r *Runtime) SetEvalSystem(system System) error {
+func (r *Runtime) SetEvalSystem(system SystemIdent) error {
 	return r.SetSetting(settingEvalSystem, string(system))
 }
 

@@ -72,6 +72,8 @@ func (e *Evaluator) unmarshalValue(v *Value, target reflect.Value, path string) 
 	switch target.Kind() {
 	case reflect.Struct:
 		return e.unmarshalStruct(v, typ, target, path)
+	case reflect.Map:
+		return e.unmarshalMap(v, typ, target, path)
 	case reflect.Slice:
 		return e.unmarshalSlice(v, typ, target, path)
 	case reflect.Array:
@@ -133,6 +135,47 @@ func (e *Evaluator) unmarshalStruct(v *Value, typ ValueType, target reflect.Valu
 		}
 	}
 
+	return nil
+}
+
+func (e *Evaluator) unmarshalMap(v *Value, typ ValueType, target reflect.Value, path string) error {
+	if typ != ValueTypeAttrs {
+		return &UnmarshalTypeError{Value: typ.String(), Type: target.Type(), Path: path}
+	}
+	if target.Type().Key().Kind() != reflect.String {
+		return &UnsupportedTypeError{Type: target.Type(), Path: path}
+	}
+
+	length, err := v.AttrLen()
+	if err != nil {
+		return fmt.Errorf("eval: failed to get attrs size at %s: %w", path, err)
+	}
+
+	items := reflect.MakeMapWithSize(target.Type(), int(length))
+	for i := uint32(0); i < length; i++ {
+		name, err := e.AttrName(v, i)
+		if err != nil {
+			return fmt.Errorf("eval: failed to get attr name %d at %s: %w", i, path, err)
+		}
+
+		child, err := e.AttrByIndex(v, i)
+		if err != nil {
+			return fmt.Errorf("eval: failed to get attr %q at %s: %w", name, path, err)
+		}
+
+		item := reflect.New(target.Type().Elem()).Elem()
+		err = e.unmarshalValue(child, item, attrPath(path, name))
+		if closeErr := child.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("eval: failed to close attr %q at %s: %w", name, path, closeErr)
+		}
+		if err != nil {
+			return err
+		}
+
+		items.SetMapIndex(reflect.ValueOf(name).Convert(target.Type().Key()), item)
+	}
+
+	target.Set(items)
 	return nil
 }
 

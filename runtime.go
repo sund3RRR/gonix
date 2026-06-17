@@ -7,7 +7,6 @@ import (
 
 	"github.com/sund3RRR/gonix/eval"
 	"github.com/sund3RRR/gonix/fetchers"
-	"github.com/sund3RRR/gonix/flake"
 	"github.com/sund3RRR/gonix/flakesettings"
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/store"
@@ -158,36 +157,6 @@ func (r *Runtime) NewEvaluator(s *store.Store, opts ...eval.Option) (*eval.Evalu
 	r.resources = append(r.resources, e)
 
 	return e, nil
-}
-
-// ParseFlakeRef parses a flake reference and tracks it for Runtime.Close.
-func (r *Runtime) ParseFlakeRef(ref string, opts ...flake.ParseOption) (*flake.Ref, error) {
-	if r.ctx == nil {
-		return nil, status.ErrClosed
-	}
-
-	parsed, err := flake.NewParsedRef(r.ctx, r.flakeFetcherSettings, r.flakeSettings, ref, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("runtime: parse flake ref: %w", err)
-	}
-	r.resources = append(r.resources, parsed)
-
-	return parsed, nil
-}
-
-// LockFlake locks a flake reference and tracks it for Runtime.Close.
-func (r *Runtime) LockFlake(e *eval.Evaluator, ref *flake.Ref, opts ...flake.LockOption) (*flake.LockedFlake, error) {
-	if r.ctx == nil {
-		return nil, status.ErrClosed
-	}
-
-	locked, err := flake.NewLockedFlake(r.ctx, r.flakeFetcherSettings, r.flakeSettings, e, ref, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("runtime: lock flake: %w", err)
-	}
-	r.resources = append(r.resources, locked)
-
-	return locked, nil
 }
 
 // Close releases resources created through r and then releases the Nix context.

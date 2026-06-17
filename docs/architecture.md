@@ -36,12 +36,13 @@ callback descriptors, raw store callbacks, and arbitrary GC finalizers.
 
 ## Entrypoint model
 
-The selected v1 entrypoint is `gonix.Runtime`.
+The selected v1 bootstrap entrypoint is `gonix.Runtime`, with `gonix.Client`
+providing higher-level flake and package workflows.
 
 `Runtime` initializes Nix, owns the Nix C context, applies settings, and creates
-high-level objects such as stores, evaluators, flake references, and locked
-flakes. It does not proxy domain operations through itself. After a child object
-is returned, callers use the child object's own methods.
+high-level objects such as stores and evaluators. `Client` borrows a
+runtime, owns the store/evaluator used for workflow helpers, and creates flake
+references, locked flakes, and package projections.
 
 This gives users one clear bootstrap object without turning the root package
 into a large proxy facade.
@@ -53,9 +54,16 @@ into a large proxy facade.
 - Apply process/global settings, verbosity, and log format.
 - Open stores.
 - Create evaluators.
-- Parse and lock flakes.
 - Own fetcher and flake settings for flake APIs.
 - Track resources created through the runtime and close them in reverse order.
+
+### Client responsibilities
+
+- Borrow an initialized runtime.
+- Open the store and evaluator used for high-level workflows.
+- Parse and lock flakes.
+- Fetch package-shaped values from locked flakes through embedded projections.
+- Track resources created through the client and close them in reverse order.
 
 ### Runtime lifetime
 
@@ -69,7 +77,7 @@ The runtime must outlive every object it creates or helps construct:
 - `fetchers.Settings`
 - `flake.Ref`
 - `flake.LockedFlake`
-- `nixpkg.Package`
+- `gonix.Client`
 
 Closing the runtime ends the object graph. Child objects should reject use after
 close with `status.ErrClosed` wrapped by the public method that detected it.
@@ -90,24 +98,22 @@ Nix noun.
 
 | Go package | Public abstractions | Responsibility |
 | --- | --- | --- |
-| `gonix` | `Runtime`, root error aliases, runtime options | SDK entrypoint, Nix initialization, settings, resource tracking, factory methods. |
+| `gonix` | `Runtime`, `Client`, `Package`, root error aliases, runtime/client options | SDK entrypoints, Nix initialization, settings, flake/package workflows, resource tracking. |
 | `storepath` | `Path` | Independent owned wrapper for `*nix.StorePath`. Does not depend on `store`. |
 | `store` | `Store`, `Derivation`, `Realization`, `Closure` | Store-backed workflows: store metadata, path parsing, derivations, realization, closure traversal, copying. |
 | `eval` | `Evaluator`, `Value`, `ValueType`, builders, realized strings | Evaluation state and values. `Value` lives here because many value operations require an `EvalState`. |
 | `fetchers` | `Settings` | Fetcher settings lifecycle for APIs that fetch or parse flake inputs. |
 | `flake` | `Settings`, `Ref`, `LockedFlake`, parse and lock options | Flake settings lifecycle, flake references, locking, and locked output access. |
-| `nixpkg` | `Package` | Later convenience layer around package-shaped Nix values. `package` is a Go keyword. |
 | `internal/status` | `NixError`, `ErrorCode`, `ErrClosed` | Conversion from mutable Nix context errors into stable Go errors. |
 | `internal/utils` | C string and small raw adapters | Shared implementation details for wrappers. |
 
 Import direction must stay one-way:
 
-- root `gonix` may import `store`, `storepath`, `eval`, `fetchers`, `flake`, and `nixpkg`;
+- root `gonix` may import `store`, `storepath`, `eval`, `fetchers`, and `flake`;
 - `store` may import `storepath`;
 - `eval` may import `store` and `storepath`;
 - `fetchers` imports no public gonix sibling packages;
 - `flake` may import `eval`;
-- `nixpkg` may import `eval`, `store`, and `storepath`;
 - subpackages must not import root `gonix`.
 
 ## Public call boundaries
@@ -129,6 +135,7 @@ as `Evaluator.Force(value)` or `Evaluator.Attr(value, name)`.
 | Abstraction | Owns | Borrows or depends on | Public inputs |
 | --- | --- | --- | --- |
 | `gonix.Runtime` | `*nix.NixCContext`, process settings, fetcher/flake settings | nothing above it | runtime options, store URIs, high-level option structs |
+| `gonix.Client` | workflow store, evaluator, package projection, created flake refs and locks | `gonix.Runtime` | client options, flake refs, package names |
 | `store.Store` | `*nix.Store` | runtime context | `*storepath.Path`, `*store.Derivation`, store options |
 | `storepath.Path` | `*nix.StorePath` | Nix context for error-producing methods | no `Store`; raw pointer only through `New` and `Borrow` escape hatches |
 | `store.Derivation` | `*nix.NixDerivation` | runtime/store context for JSON and store operations | JSON strings, cloned derivations |
@@ -138,7 +145,7 @@ as `Evaluator.Force(value)` or `Evaluator.Attr(value, name)`.
 | `flake.Settings` | `*nix.NixFlakeSettings` | runtime context | raw pointer only through `Borrow` escape hatch |
 | `flake.Ref` | `*nix.NixFlakeReference`, fragment string | fetcher/flake settings context | parse options, input override paths |
 | `flake.LockedFlake` | `*nix.NixLockedFlake` | `*eval.Evaluator`, flake settings | lock options, `*flake.Ref`; returns `*eval.Value` outputs |
-| `nixpkg.Package` | usually no raw Nix object; may wrap an `eval.Value` | `*eval.Evaluator`, optional `*store.Store` | package value plus evaluator/store-backed helpers |
+| `gonix.Package` | no raw Nix object | decoded package projection | package fields and metadata |
 
 ### Runtime
 
@@ -148,12 +155,23 @@ Typical creation surface:
 - `Runtime.Close() error`
 - `Runtime.OpenStore(uri string, opts ...store.Option) (*store.Store, error)`
 - `Runtime.NewEvaluator(store *store.Store, opts ...eval.Option) (*eval.Evaluator, error)`
-- `Runtime.ParseFlakeRef(ref string, opts ...flake.ParseOption) (*flake.Ref, error)`
-- `Runtime.LockFlake(e *eval.Evaluator, ref *flake.Ref, opts ...flake.LockOption) (*flake.LockedFlake, error)`
 
 Runtime methods should stop at bootstrapping and composition. Store operations
 belong on `store.Store`; value operations belong on `eval.Evaluator` or
-`eval.Value`; flake operations belong on `flake.Ref` and `flake.LockedFlake`.
+`eval.Value`; high-level flake and package workflows belong on `Client`.
+
+### Client
+
+Typical creation and workflow surface:
+
+- `gonix.NewClient(runtime *Runtime, opts ...ClientOption) (*Client, error)`
+- `Client.Close() error`
+- `Client.ParseFlakeRef(ref string, opts ...flake.ParseOption) (*flake.Ref, error)`
+- `Client.LockFlake(ref *flake.Ref, opts ...flake.LockOption) (*flake.LockedFlake, error)`
+- `Client.FetchPackage(locked *flake.LockedFlake, name string, opts ...FetchPackageOption) (Package, error)`
+
+Client methods own the workflow resources they create and require the borrowed
+runtime to outlive the client.
 
 ### Store
 
@@ -344,8 +362,8 @@ an evaluator, and often a store.
 
 Creation:
 
-- `Runtime.ParseFlakeRef(ref string, opts ...flake.ParseOption) (*flake.Ref, error)`
-- `Runtime.LockFlake(e *eval.Evaluator, ref *flake.Ref, opts ...flake.LockOption) (*flake.LockedFlake, error)`
+- `Client.ParseFlakeRef(ref string, opts ...flake.ParseOption) (*flake.Ref, error)`
+- `Client.LockFlake(ref *flake.Ref, opts ...flake.LockOption) (*flake.LockedFlake, error)`
 
 `flake.Ref` owns a raw `*nix.NixFlakeReference` and stores the parsed fragment
 as a Go string.
@@ -357,22 +375,19 @@ The main v1 method can be:
 
 - `OutputAttrs() (*eval.Value, error)`
 
-Higher-level traversal should build on `Evaluator.Attr(value, name)` and later
-package helpers.
+Higher-level traversal should build on `Evaluator.Attr(value, name)` or
+`Client.FetchPackage`.
 
 ### Package
 
-`nixpkg.Package` is a convenience layer, not a raw Nix C concept.
+`gonix.Package` is a decoded convenience shape, not a raw Nix C concept.
 
 Expected shape:
 
-- wraps a `Value` that represents a package or derivation output;
-- borrows the same `eval.Evaluator` as that value;
-- uses `Store` for realization and output path inspection;
-- exposes name, system, output, and derivation helpers when those are safely
-  available.
-
-Package helpers should wait until `Value` and flake output traversal are stable.
+- is produced by `Client.FetchPackage`;
+- contains Go-native package fields, output metadata, source metadata, and
+  normalized nixpkgs `meta` fields;
+- does not own or borrow raw Nix values.
 
 ## Dependency graph
 
@@ -398,7 +413,7 @@ flowchart TD
     FlakeRef["flake.Ref\nowns *nix.NixFlakeReference\nplus fragment"]
     FlakeLockFlags["FlakeLockFlags\ninternal temporary"]
     LockedFlake["flake.LockedFlake\nowns *nix.NixLockedFlake\nborrows evaluator"]
-    Package["nixpkg.Package\nconvenience wrapper around package Value"]
+    Package["gonix.Package\nGo-native package projection"]
 
     Runtime -->|exposes| Settings
     Runtime -->|owns| Fetchers
@@ -486,7 +501,7 @@ flowchart TB
         Value["eval.Value"]
         Realization["store.Realization"]
         Closure["store.Closure"]
-        Package["nixpkg.Package"]
+        Package["gonix.Package"]
     end
 
     subgraph L4["Internal helpers and temporary wrappers"]
@@ -569,7 +584,7 @@ flowchart TB
 | `flake.Settings` | `*nix.NixFlakeSettings` | owned, borrows runtime context | `FlakeSettingsFree` |
 | `flake.Ref` | `*nix.NixFlakeReference` | owned | `FlakeReferenceFree` |
 | `flake.LockedFlake` | `*nix.NixLockedFlake` | owned, borrows `eval.Evaluator` | `LockedFlakeFree` |
-| `nixpkg.Package` | none directly | wraps or borrows package `eval.Value`; may borrow `store.Store` | no raw free; close owned `Value` if it owns one |
+| `gonix.Package` | none directly | decoded package projection | no raw free |
 
 Every owned wrapper must implement idempotent `Close() error`. Public operations
 after `Close` should return a wrapped `status.ErrClosed`.
@@ -618,6 +633,6 @@ Expected layout for v1:
 | `eval/realised_string.go` | Realized string conversion and referenced path cloning. |
 | `fetchers/settings.go` | `fetchers.Settings`, constructors, borrow, close. |
 | `flake/settings.go`, `flake/ref.go`, `flake/lock.go` | Flake settings, flake references, parse options, lock options, locked output attrs. |
-| `nixpkg/package.go` | Later package convenience layer. |
+| `client.go`, `package.go`, `scripts/projections/package.nix` | Client workflow layer and stable package projection. |
 | `internal/status` | Error conversion, error codes, `ErrClosed`. |
 | `internal/utils` | C string conversion and small raw adapters. |
