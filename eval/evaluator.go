@@ -48,6 +48,17 @@ func New(ctx *nix.NixCContext, s *store.Store, opts ...Option) (*Evaluator, erro
 		return nil, fmt.Errorf("eval: failed to set lookup path: %w", status.FromContext(ctx))
 	}
 
+	if cfg.flakesettings != nil {
+		flakesettingsPtr, err := cfg.flakesettings.Borrow()
+		if err != nil {
+			return nil, fmt.Errorf("eval: failed to borrow flake settings: %w", err)
+		}
+
+		if code := nix.FlakeSettingsAddToEvalStateBuilder(ctx, flakesettingsPtr, builder); status.ErrorCode(code) != status.ErrorCodeOK {
+			return nil, fmt.Errorf("eval: failed to add flake settings: %w", status.FromContext(ctx))
+		}
+	}
+
 	state := nix.EvalStateBuild(ctx, builder)
 	if state == nil {
 		return nil, fmt.Errorf("eval: failed to build eval state: %w", status.FromContext(ctx))

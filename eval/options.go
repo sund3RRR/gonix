@@ -6,11 +6,16 @@
 // created them.
 package eval
 
+import (
+	"github.com/sund3RRR/gonix/flakesettings"
+)
+
 // Option configures Evaluator creation.
 type Option func(*config)
 
 type config struct {
-	lookupPath []string
+	lookupPath    []string
+	flakesettings *flakesettings.Settings
 }
 
 // WithLookupPath sets the Nix evaluator lookup path.
@@ -20,5 +25,15 @@ type config struct {
 func WithLookupPath(entries ...string) Option {
 	return func(c *config) {
 		c.lookupPath = append(c.lookupPath, entries...)
+	}
+}
+
+// WithEvalStateBuilderConfigurer adds an advanced raw builder configuration hook.
+//
+// The hook runs after basic evaluator options are applied and before the raw
+// eval state is built.
+func WithFlakeSettings(settings *flakesettings.Settings) Option {
+	return func(c *config) {
+		c.flakesettings = settings
 	}
 }

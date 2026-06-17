@@ -112,6 +112,24 @@ func NewRuntime(opts ...Option) (*Runtime, error) {
 	return r, nil
 }
 
+// GetFlakeSettings returns the flake settings.
+func (r *Runtime) GetFlakeSettings() (*flakesettings.Settings, error) {
+	if r.ctx == nil {
+		return nil, status.ErrClosed
+	}
+
+	return r.flakeSettings, nil
+}
+
+// GetFlakeFetcherSettings returns the fetcher settings.
+func (r *Runtime) GetFlakeFetcherSettings() (*fetchers.Settings, error) {
+	if r.ctx == nil {
+		return nil, status.ErrClosed
+	}
+
+	return r.flakeFetcherSettings, nil
+}
+
 // OpenStore opens a Nix store and tracks it for Runtime.Close.
 func (r *Runtime) OpenStore(uri string, opts ...store.Option) (*store.Store, error) {
 	if r.ctx == nil {
