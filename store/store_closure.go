@@ -194,7 +194,14 @@ func convertClosurePaths(ctx *nix.NixCContext, paths *nix.StorePathArray) (*Clos
 			return nil, fmt.Errorf("store: failed to clone closure path from array %d: %w", i, status.FromContext(ctx))
 		}
 
-		closure.Paths = append(closure.Paths, storepath.New(ctx, pathPtr))
+		path, err := storepath.New(ctx, pathPtr)
+		if err != nil {
+			for _, p := range closure.Paths {
+				_ = p.Close()
+			}
+			return nil, fmt.Errorf("store: failed to create closure path from array %d: %w", i, err)
+		}
+		closure.Paths = append(closure.Paths, path)
 	}
 
 	return closure, nil
@@ -222,9 +229,17 @@ func convertRealiseResults(ctx *nix.NixCContext, results *nix.StoreRealiseResult
 			return nil, fmt.Errorf("store: failed to realize result %d path: %w", i, status.FromContext(ctx))
 		}
 
+		path, err := storepath.New(ctx, pathPtr)
+		if err != nil {
+			for _, r := range realizations {
+				_ = r.Close()
+			}
+			return nil, fmt.Errorf("store: failed to create result %d path: %w", i, err)
+		}
+
 		realizations = append(realizations, Realization{
 			OutputName: outputName,
-			Path:       storepath.New(ctx, pathPtr),
+			Path:       path,
 		})
 	}
 

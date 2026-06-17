@@ -47,17 +47,23 @@ func (s *Store) StoreDir() (string, error) {
 // The returned path owns a Nix StorePath handle and must be closed by the
 // caller. ParsePath validates the syntax of the path and leaves semantic
 // validity in this store to IsValidPath.
-func (s *Store) ParsePath(path string) (*storepath.Path, error) {
+func (s *Store) ParsePath(pathStr string) (*storepath.Path, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed
 	}
 
-	ptr := nix.StoreParsePath(s.ctx, s.ptr, path)
+	ptr := nix.StoreParsePath(s.ctx, s.ptr, pathStr)
 	if ptr == nil {
 		return nil, fmt.Errorf("store: failed to parse path: %w", status.FromContext(s.ctx))
 	}
 
-	return storepath.New(s.ctx, ptr), nil
+	path, err := storepath.New(s.ctx, ptr)
+	if err != nil {
+		nix.StorePathFree(ptr)
+		return nil, fmt.Errorf("store: failed to create store path: %w", err)
+	}
+
+	return path, nil
 }
 
 // PathFromHash returns the store path whose hash part matches hashPart.
@@ -75,7 +81,13 @@ func (s *Store) PathFromHash(hashPart []byte) (*storepath.Path, error) {
 		return nil, fmt.Errorf("store: failed to get path from hash: %w", status.FromContext(s.ctx))
 	}
 
-	return storepath.New(s.ctx, ptr), nil
+	path, err := storepath.New(s.ctx, ptr)
+	if err != nil {
+		nix.StorePathFree(ptr)
+		return nil, fmt.Errorf("store: failed to create store path: %w", err)
+	}
+
+	return path, nil
 }
 
 // RealPath returns the concrete filesystem path for path in this store.

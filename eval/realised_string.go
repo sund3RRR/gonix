@@ -82,7 +82,12 @@ func (e *Evaluator) RealiseString(v *Value) (*RealisedString, error) {
 			_ = out.Close()
 			return nil, fmt.Errorf("eval: failed to clone realised string path %d: %w", i, status.FromContext(e.ctx))
 		}
-		out.Paths = append(out.Paths, storepath.New(e.ctx, pathPtr))
+		path, err := storepath.New(e.ctx, pathPtr)
+		if err != nil {
+			_ = out.Close()
+			return nil, fmt.Errorf("eval: failed to clone realised string path %d: %w", i, err)
+		}
+		out.Paths = append(out.Paths, path)
 	}
 
 	return out, nil

@@ -60,7 +60,10 @@ func parseRawPath(t *testing.T, ctx *nix.NixCContext, store *nix.Store, rawPath 
 func newTestPath(t *testing.T, ctx *nix.NixCContext, store *nix.Store, rawPath string) *Path {
 	t.Helper()
 
-	path := New(ctx, parseRawPath(t, ctx, store, rawPath))
+	path, err := New(ctx, parseRawPath(t, ctx, store, rawPath))
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
 	t.Cleanup(func() {
 		if err := path.Close(); err != nil {
 			t.Fatalf("Path.Close() error = %v", err)
@@ -119,12 +122,7 @@ func TestFromParts(t *testing.T) {
 				ctx := newTestContext(t)
 				store := newTestStore(t, ctx)
 				source := newTestPath(t, ctx, store, nonZeroStorePath)
-				hash, err := source.Hash()
-				if err != nil {
-					t.Fatalf("source.Hash() error = %v", err)
-				}
-
-				return ctx, hash, "created-from-parts"
+				return ctx, source.Hash(), "created-from-parts"
 			},
 			wantName: "created-from-parts",
 			wantHash: func(t *testing.T) [20]byte {
@@ -133,12 +131,7 @@ func TestFromParts(t *testing.T) {
 				ctx := newTestContext(t)
 				store := newTestStore(t, ctx)
 				source := newTestPath(t, ctx, store, nonZeroStorePath)
-				hash, err := source.Hash()
-				if err != nil {
-					t.Fatalf("source.Hash() error = %v", err)
-				}
-
-				return hash
+				return source.Hash()
 			},
 		},
 	}
@@ -164,19 +157,11 @@ func TestFromParts(t *testing.T) {
 				}
 			})
 
-			gotName, err := got.Name()
-			if err != nil {
-				t.Fatalf("created.Name() error = %v", err)
-			}
-			if gotName != tt.wantName {
+			if gotName := got.Name(); gotName != tt.wantName {
 				t.Fatalf("created.Name() = %q, want %q", gotName, tt.wantName)
 			}
 
-			gotHash, err := got.Hash()
-			if err != nil {
-				t.Fatalf("created.Hash() error = %v", err)
-			}
-			if wantHash := tt.wantHash(t); gotHash != wantHash {
+			if gotHash, wantHash := got.Hash(), tt.wantHash(t); gotHash != wantHash {
 				t.Fatalf("created.Hash() = %v, want %v", gotHash, wantHash)
 			}
 		})
@@ -185,10 +170,9 @@ func TestFromParts(t *testing.T) {
 
 func TestPathName(t *testing.T) {
 	tests := []struct {
-		name          string
-		setup         func(t *testing.T) *Path
-		want          string
-		wantClosedErr bool
+		name  string
+		setup func(t *testing.T) *Path
+		want  string
 	}{
 		{
 			name: "open path",
@@ -202,7 +186,7 @@ func TestPathName(t *testing.T) {
 			want: "demo",
 		},
 		{
-			name: "closed path",
+			name: "closed path keeps cached name",
 			setup: func(t *testing.T) *Path {
 				t.Helper()
 
@@ -215,32 +199,13 @@ func TestPathName(t *testing.T) {
 
 				return path
 			},
-			wantClosedErr: true,
-		},
-		{
-			name: "nil pointer",
-			setup: func(t *testing.T) *Path {
-				t.Helper()
-
-				return New(newTestContext(t), nil)
-			},
-			wantClosedErr: true,
+			want: "demo",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.setup(t).Name()
-			if tt.wantClosedErr {
-				requireClosedError(t, err)
-				if got != "" {
-					t.Fatalf("Name() = %q, want empty string", got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("Name() error = %v", err)
-			}
+			got := tt.setup(t).Name()
 			if got != tt.want {
 				t.Fatalf("Name() = %q, want %q", got, tt.want)
 			}
@@ -250,11 +215,10 @@ func TestPathName(t *testing.T) {
 
 func TestPathHash(t *testing.T) {
 	tests := []struct {
-		name          string
-		setup         func(t *testing.T) *Path
-		want          [20]byte
-		wantNonZero   bool
-		wantClosedErr bool
+		name        string
+		setup       func(t *testing.T) *Path
+		want        [20]byte
+		wantNonZero bool
 	}{
 		{
 			name: "zero hash path",
@@ -279,7 +243,7 @@ func TestPathHash(t *testing.T) {
 			wantNonZero: true,
 		},
 		{
-			name: "closed path",
+			name: "closed path keeps cached hash",
 			setup: func(t *testing.T) *Path {
 				t.Helper()
 
@@ -292,23 +256,13 @@ func TestPathHash(t *testing.T) {
 
 				return path
 			},
-			wantClosedErr: true,
+			want: [20]byte{},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.setup(t).Hash()
-			if tt.wantClosedErr {
-				requireClosedError(t, err)
-				if got != ([20]byte{}) {
-					t.Fatalf("Hash() = %v, want zero value", got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("Hash() error = %v", err)
-			}
+			got := tt.setup(t).Hash()
 			if tt.wantNonZero {
 				if got == ([20]byte{}) {
 					t.Fatal("Hash() returned zero hash, want non-zero hash")
@@ -376,26 +330,14 @@ func TestPathClone(t *testing.T) {
 				}
 			})
 
-			sourceName, err := source.Name()
-			if err != nil {
-				t.Fatalf("source.Name() error = %v", err)
-			}
-			cloneName, err := got.Name()
-			if err != nil {
-				t.Fatalf("clone.Name() error = %v", err)
-			}
+			sourceName := source.Name()
+			cloneName := got.Name()
 			if cloneName != sourceName {
 				t.Fatalf("clone.Name() = %q, want %q", cloneName, sourceName)
 			}
 
-			sourceHash, err := source.Hash()
-			if err != nil {
-				t.Fatalf("source.Hash() error = %v", err)
-			}
-			cloneHash, err := got.Hash()
-			if err != nil {
-				t.Fatalf("clone.Hash() error = %v", err)
-			}
+			sourceHash := source.Hash()
+			cloneHash := got.Hash()
 			if cloneHash != sourceHash {
 				t.Fatalf("clone.Hash() = %v, want %v", cloneHash, sourceHash)
 			}
@@ -403,8 +345,8 @@ func TestPathClone(t *testing.T) {
 			if err := got.Close(); err != nil {
 				t.Fatalf("clone.Close() error = %v", err)
 			}
-			if _, err := source.Name(); err != nil {
-				t.Fatalf("source.Name() after clone close error = %v", err)
+			if gotName := source.Name(); gotName != sourceName {
+				t.Fatalf("source.Name() after clone close = %q, want %q", gotName, sourceName)
 			}
 		})
 	}
@@ -480,15 +422,11 @@ func TestPathClose(t *testing.T) {
 
 				ctx := newTestContext(t)
 				store := newTestStore(t, ctx)
-				return New(ctx, parseRawPath(t, ctx, store, zeroStorePath))
-			},
-		},
-		{
-			name: "nil pointer",
-			setup: func(t *testing.T) *Path {
-				t.Helper()
-
-				return New(newTestContext(t), nil)
+				path, err := New(ctx, parseRawPath(t, ctx, store, zeroStorePath))
+				if err != nil {
+					t.Fatalf("New() error = %v", err)
+				}
+				return path
 			},
 		},
 	}

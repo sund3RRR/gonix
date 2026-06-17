@@ -67,5 +67,11 @@ func (s *Store) AddDerivation(d *Derivation) (*storepath.Path, error) {
 		return nil, fmt.Errorf("store: failed to add derivation: %w", status.FromContext(s.ctx))
 	}
 
-	return storepath.New(s.ctx, ptr), nil
+	path, err := storepath.New(s.ctx, ptr)
+	if err != nil {
+		nix.StorePathFree(ptr)
+		return nil, fmt.Errorf("store: failed to create store path: %w", err)
+	}
+
+	return path, nil
 }

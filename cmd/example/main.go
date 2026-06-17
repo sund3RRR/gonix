@@ -27,7 +27,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer r.Close()
+	defer func() {
+		_ = r.Close()
+	}()
 
 	// Open a read-only store
 	s, err := r.OpenStore(storeURI, store.WithReadOnly(readOnly))
@@ -40,7 +42,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer c.Close()
+	defer func() {
+		_ = c.Close()
+	}()
 
 	// Parse and lock the flake reference
 	ref, err := c.ParseFlakeRef(flakeRef)
