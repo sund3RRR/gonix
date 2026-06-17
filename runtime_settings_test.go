@@ -8,13 +8,13 @@ import (
 func TestRuntimeSettings(t *testing.T) {
 	tests := []struct {
 		name    string
-		opts    []Option
+		opts    []RuntimeOption
 		run     func(t *testing.T, r *Runtime)
 		wantErr bool
 	}{
 		{
 			name: "with_setting_applies_setting",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithSetting("experimental-features", "nix-command flakes"),
 			},
 			run: func(t *testing.T, r *Runtime) {
@@ -31,9 +31,9 @@ func TestRuntimeSettings(t *testing.T) {
 		},
 		{
 			name: "with_settings_copies_map_and_last_option_wins",
-			opts: func() []Option {
+			opts: func() []RuntimeOption {
 				settings := map[string]string{"experimental-features": "nix-command"}
-				opts := []Option{
+				opts := []RuntimeOption{
 					WithSettings(settings),
 					WithSetting("experimental-features", "nix-command flakes"),
 				}
@@ -109,13 +109,13 @@ func TestRuntimeSettings(t *testing.T) {
 func TestRuntimeTypedSettingOptions(t *testing.T) {
 	tests := []struct {
 		name    string
-		opts    []Option
+		opts    []RuntimeOption
 		run     func(t *testing.T, r *Runtime)
 		wantErr bool
 	}{
 		{
 			name: "experimental_features",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithExperimentalFeatures(ExperimentalFeatureNixCommand, ExperimentalFeatureFlakes),
 			},
 			run: func(t *testing.T, r *Runtime) {
@@ -125,7 +125,7 @@ func TestRuntimeTypedSettingOptions(t *testing.T) {
 		},
 		{
 			name: "experimental_features_accumulate",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithExperimentalFeatures(ExperimentalFeatureNixCommand),
 				WithExperimentalFeatures(ExperimentalFeatureFlakes),
 				WithExperimentalFeatures(ExperimentalFeatureFetchTree),
@@ -137,7 +137,7 @@ func TestRuntimeTypedSettingOptions(t *testing.T) {
 		},
 		{
 			name: "numeric_and_system_settings",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithCores(2),
 				WithMaxJobs(1),
 				WithSystem(MakeSystem(OSLinux, ArchX86_64)),
@@ -151,7 +151,7 @@ func TestRuntimeTypedSettingOptions(t *testing.T) {
 		},
 		{
 			name: "max_jobs_auto",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithMaxJobsAuto(),
 			},
 			run: func(t *testing.T, r *Runtime) {
@@ -161,7 +161,7 @@ func TestRuntimeTypedSettingOptions(t *testing.T) {
 		},
 		{
 			name: "substituters_and_keys",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithSubstituters("https://cache.nixos.org/", "https://example.com/cache"),
 				WithTrustedPublicKeys("cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="),
 			},
@@ -173,7 +173,7 @@ func TestRuntimeTypedSettingOptions(t *testing.T) {
 		},
 		{
 			name: "list_settings_accumulate_and_dedupe",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithSubstituters("https://cache.nixos.org/"),
 				WithSubstituters("https://example.com/cache", "https://cache.nixos.org/"),
 				WithTrustedPublicKeys("cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="),
@@ -187,7 +187,7 @@ func TestRuntimeTypedSettingOptions(t *testing.T) {
 		},
 		{
 			name: "raw_list_setting_accumulates_with_typed_options",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithExperimentalFeatures(ExperimentalFeatureNixCommand, ExperimentalFeatureFlakes),
 				WithSetting("experimental-features", "ca-derivations"),
 			},
@@ -198,28 +198,28 @@ func TestRuntimeTypedSettingOptions(t *testing.T) {
 		},
 		{
 			name: "eval_system_is_not_registered_by_current_runtime_init",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithEvalSystem(MakeSystem(OSLinux, ArchX86_64)),
 			},
 			wantErr: true,
 		},
 		{
 			name: "pure_eval_is_not_registered_by_current_runtime_init",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithPureEval(true),
 			},
 			wantErr: true,
 		},
 		{
 			name: "import_from_derivation_is_not_registered_by_current_runtime_init",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithImportFromDerivation(false),
 			},
 			wantErr: true,
 		},
 		{
 			name: "accept_flake_config_is_not_registered_by_current_runtime_init",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithExperimentalFeatures(ExperimentalFeatureNixCommand, ExperimentalFeatureFlakes),
 				WithAcceptFlakeConfig(true),
 			},
@@ -227,7 +227,7 @@ func TestRuntimeTypedSettingOptions(t *testing.T) {
 		},
 		{
 			name: "raw_option_overrides_typed",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithCores(2),
 				WithSetting("cores", "4"),
 			},
@@ -238,7 +238,7 @@ func TestRuntimeTypedSettingOptions(t *testing.T) {
 		},
 		{
 			name: "typed_option_overrides_raw",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithSetting("cores", "4"),
 				WithCores(2),
 			},

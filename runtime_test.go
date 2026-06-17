@@ -14,7 +14,7 @@ import (
 func TestNewRuntime(t *testing.T) {
 	tests := []struct {
 		name          string
-		opts          []Option
+		opts          []RuntimeOption
 		wantErr       bool
 		wantClosedErr bool
 	}{
@@ -23,13 +23,13 @@ func TestNewRuntime(t *testing.T) {
 		},
 		{
 			name: "load_config",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithLoadConfig(),
 			},
 		},
 		{
 			name: "invalid_setting",
-			opts: []Option{
+			opts: []RuntimeOption{
 				WithSetting("go-bindings-test-setting-that-does-not-exist", "x"),
 			},
 			wantErr: true,

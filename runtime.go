@@ -27,7 +27,7 @@ type Runtime struct {
 }
 
 // NewRuntime creates and initializes a Nix runtime.
-func NewRuntime(opts ...Option) (*Runtime, error) {
+func NewRuntime(opts ...RuntimeOption) (*Runtime, error) {
 	cfg := newRuntimeConfig()
 	for _, opt := range opts {
 		opt(&cfg)

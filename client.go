@@ -34,10 +34,6 @@ type Client struct {
 
 // NewClient creates a high-level client using r.
 func NewClient(r *Runtime, opts ...ClientOption) (*Client, error) {
-	if r == nil || r.ctx == nil {
-		return nil, status.ErrClosed
-	}
-
 	var cfg clientConfig
 	for _, opt := range opts {
 		opt(&cfg)

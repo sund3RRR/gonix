@@ -75,14 +75,14 @@ const (
 	ExperimentalFeatureCADerivations ExperimentalFeature = "ca-derivations"
 )
 
-// Option configures Runtime creation.
-type Option func(*runtimeConfig)
+// RuntimeOption configures Runtime creation.
+type RuntimeOption func(*runtimeConfig)
 
 // WithLoadConfig makes NewRuntime load the user's Nix configuration.
 //
 // Without this option, Runtime uses Nix store initialization without loading
 // user configuration for reproducible SDK behavior.
-func WithLoadConfig() Option {
+func WithLoadConfig() RuntimeOption {
 	return func(c *runtimeConfig) {
 		c.loadConfig = true
 	}
@@ -92,7 +92,7 @@ func WithLoadConfig() Option {
 //
 // If the same scalar setting is configured more than once, the last value wins.
 // List-like settings are split on whitespace, accumulated, and deduplicated.
-func WithSetting(key, value string) Option {
+func WithSetting(key, value string) RuntimeOption {
 	return func(c *runtimeConfig) {
 		c.setSetting(key, value)
 	}
@@ -102,7 +102,7 @@ func WithSetting(key, value string) Option {
 //
 // The provided map is copied. Scalar settings use last-value-wins semantics;
 // list-like settings are split on whitespace, accumulated, and deduplicated.
-func WithSettings(settings map[string]string) Option {
+func WithSettings(settings map[string]string) RuntimeOption {
 	copied := maps.Clone(settings)
 	return func(c *runtimeConfig) {
 		for key, value := range copied {
@@ -112,14 +112,14 @@ func WithSettings(settings map[string]string) Option {
 }
 
 // WithVerbosity sets the Nix verbosity level during Runtime creation.
-func WithVerbosity(level Verbosity) Option {
+func WithVerbosity(level Verbosity) RuntimeOption {
 	return func(c *runtimeConfig) {
 		c.verbosity = &level
 	}
 }
 
 // WithLogFormat sets the Nix log format during Runtime creation.
-func WithLogFormat(format LogFormat) Option {
+func WithLogFormat(format LogFormat) RuntimeOption {
 	return func(c *runtimeConfig) {
 		c.logFormat = &format
 	}
@@ -128,7 +128,7 @@ func WithLogFormat(format LogFormat) Option {
 // WithExperimentalFeatures enables Nix experimental features during Runtime creation.
 //
 // Repeated calls accumulate features and remove duplicates.
-func WithExperimentalFeatures(features ...ExperimentalFeature) Option {
+func WithExperimentalFeatures(features ...ExperimentalFeature) RuntimeOption {
 	return func(c *runtimeConfig) {
 		values := make([]string, 0, len(features))
 		for _, feature := range features {
@@ -141,7 +141,7 @@ func WithExperimentalFeatures(features ...ExperimentalFeature) Option {
 // WithSubstituters sets the substituter store URLs.
 //
 // Repeated calls accumulate URLs and remove duplicates.
-func WithSubstituters(urls ...string) Option {
+func WithSubstituters(urls ...string) RuntimeOption {
 	return func(c *runtimeConfig) {
 		addListSettingValues(c.substituters, urls...)
 	}
@@ -150,63 +150,63 @@ func WithSubstituters(urls ...string) Option {
 // WithTrustedPublicKeys sets trusted binary cache public keys.
 //
 // Repeated calls accumulate keys and remove duplicates.
-func WithTrustedPublicKeys(keys ...string) Option {
+func WithTrustedPublicKeys(keys ...string) RuntimeOption {
 	return func(c *runtimeConfig) {
 		addListSettingValues(c.trustedPublicKeys, keys...)
 	}
 }
 
 // WithCores sets the number of cores exposed to builders through NIX_BUILD_CORES.
-func WithCores(cores int) Option {
+func WithCores(cores int) RuntimeOption {
 	return func(c *runtimeConfig) {
 		c.setSetting(settingCores, strconv.Itoa(cores))
 	}
 }
 
 // WithMaxJobs sets the maximum number of local build jobs.
-func WithMaxJobs(maxJobs int) Option {
+func WithMaxJobs(maxJobs int) RuntimeOption {
 	return func(c *runtimeConfig) {
 		c.setSetting(settingMaxJobs, strconv.Itoa(maxJobs))
 	}
 }
 
 // WithMaxJobsAuto lets Nix choose the maximum number of local build jobs.
-func WithMaxJobsAuto() Option {
+func WithMaxJobsAuto() RuntimeOption {
 	return func(c *runtimeConfig) {
 		c.setSetting(settingMaxJobs, "auto")
 	}
 }
 
 // WithSystem sets the Nix build system.
-func WithSystem(system string) Option {
+func WithSystem(system string) RuntimeOption {
 	return func(c *runtimeConfig) {
 		c.setSetting(settingSystem, system)
 	}
 }
 
 // WithEvalSystem sets the Nix evaluation system.
-func WithEvalSystem(system string) Option {
+func WithEvalSystem(system string) RuntimeOption {
 	return func(c *runtimeConfig) {
 		c.setSetting(settingEvalSystem, system)
 	}
 }
 
 // WithPureEval controls pure evaluation mode.
-func WithPureEval(pure bool) Option {
+func WithPureEval(pure bool) RuntimeOption {
 	return func(c *runtimeConfig) {
 		c.setSetting(settingPureEval, strconv.FormatBool(pure))
 	}
 }
 
 // WithImportFromDerivation controls whether evaluation may import from derivations.
-func WithImportFromDerivation(allow bool) Option {
+func WithImportFromDerivation(allow bool) RuntimeOption {
 	return func(c *runtimeConfig) {
 		c.setSetting(settingAllowImportFromDerivation, strconv.FormatBool(allow))
 	}
 }
 
 // WithAcceptFlakeConfig controls whether flake-provided Nix settings are accepted.
-func WithAcceptFlakeConfig(accept bool) Option {
+func WithAcceptFlakeConfig(accept bool) RuntimeOption {
 	return func(c *runtimeConfig) {
 		c.setSetting(settingAcceptFlakeConfig, strconv.FormatBool(accept))
 	}
