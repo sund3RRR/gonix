@@ -94,22 +94,12 @@ func (s *Store) PrintPath(path *storepath.Path) (string, error) {
 		return "", status.ErrClosed
 	}
 
-	rawCtx, err := s.ctx.Borrow()
+	storeDir, err := s.StoreDir()
 	if err != nil {
-		return "", fmt.Errorf("store: failed to borrow context: %w", err)
+		return "", fmt.Errorf("store: failed to get store dir: %w", err)
 	}
 
-	pathPtr, err := path.Borrow()
-	if err != nil {
-		return "", fmt.Errorf("store: failed to borrow path: %w", err)
-	}
-
-	ptr := nix.StorePrintPath(rawCtx, s.ptr, pathPtr)
-	if ptr == nil {
-		return "", fmt.Errorf("store: failed to print path: %w", status.FromContext(rawCtx))
-	}
-
-	return utils.TakeCString(ptr), nil
+	return storeDir + "/" + utils.EncodeNix32(path.Hash()) + "-" + path.Name(), nil
 }
 
 // PathFromHash returns the store path whose hash part matches hashPart.

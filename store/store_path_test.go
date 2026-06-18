@@ -164,34 +164,96 @@ func TestStore_ParsePath(t *testing.T) {
 func TestStore_PrintPath(t *testing.T) {
 	tests := []struct {
 		name    string
-		setup   func(t *testing.T) (*Store, string)
+		setup   func(t *testing.T) (*Store, *storepath.Path)
+		want    string
 		wantErr bool
 	}{
 		{
-			name: "valid_path",
-			setup: func(t *testing.T) (*Store, string) {
+			name: "zero_hash_path",
+			setup: func(t *testing.T) (*Store, *storepath.Path) {
 				t.Helper()
-				return newStoreTestStore(t), testZeroStorePath
+				s := newStoreTestStore(t)
+				return s, newStoreTestPath(t, s, testZeroStorePath)
 			},
+			want: testZeroStorePath,
+		},
+		{
+			name: "nonzero_hash_path",
+			setup: func(t *testing.T) (*Store, *storepath.Path) {
+				t.Helper()
+				s := newStoreTestStore(t)
+				return s, newStoreTestPath(t, s, testNonZeroStorePath)
+			},
+			want: testNonZeroStorePath,
+		},
+		{
+			name: "custom_store_dir",
+			setup: func(t *testing.T) (*Store, *storepath.Path) {
+				t.Helper()
+
+				s, err := New(newStoreTestContext(t), "dummy://", WithStoreDir("/custom/store"))
+				if err != nil {
+					t.Fatalf("New(dummy://) error = %v", err)
+				}
+				t.Cleanup(func() {
+					if err := s.Close(); err != nil {
+						t.Fatalf("Store.Close() error = %v", err)
+					}
+				})
+
+				const rawPath = "/custom/store/11111111111111111111111111111111-source"
+				return s, newStoreTestPath(t, s, rawPath)
+			},
+			want: "/custom/store/11111111111111111111111111111111-source",
 		},
 		{
 			name: "closed_store",
-			setup: func(t *testing.T) (*Store, string) {
+			setup: func(t *testing.T) (*Store, *storepath.Path) {
 				t.Helper()
 				s := newStoreTestStore(t)
-				_ = newStoreTestPath(t, s, testZeroStorePath)
+				path := newStoreTestPath(t, s, testZeroStorePath)
 				if err := s.Close(); err != nil {
 					t.Fatalf("Store.Close() error = %v", err)
 				}
-				return s, testZeroStorePath
+				return s, path
+			},
+			wantErr: true,
+		},
+		{
+			name: "closed_context",
+			setup: func(t *testing.T) (*Store, *storepath.Path) {
+				t.Helper()
+
+				ctx := newStoreTestContext(t)
+				s, err := New(ctx, "dummy://")
+				if err != nil {
+					t.Fatalf("New(dummy://) error = %v", err)
+				}
+				t.Cleanup(func() {
+					if err := s.Close(); err != nil {
+						t.Fatalf("Store.Close() error = %v", err)
+					}
+				})
+
+				path := newStoreTestPath(t, s, testZeroStorePath)
+				if err := ctx.Close(); err != nil {
+					t.Fatalf("Context.Close() error = %v", err)
+				}
+
+				return s, path
 			},
 			wantErr: true,
 		},
 		{
 			name: "closed_path",
-			setup: func(t *testing.T) (*Store, string) {
+			setup: func(t *testing.T) (*Store, *storepath.Path) {
 				t.Helper()
-				return newStoreTestStore(t), ""
+				s := newStoreTestStore(t)
+				path := newStoreTestPath(t, s, testZeroStorePath)
+				if err := path.Close(); err != nil {
+					t.Fatalf("Path.Close() error = %v", err)
+				}
+				return s, path
 			},
 			wantErr: true,
 		},
@@ -199,19 +261,7 @@ func TestStore_PrintPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s, rawPath := tt.setup(t)
-			var path *storepath.Path
-			if rawPath == testZeroStorePath && s.ptr == nil {
-				openStore := newStoreTestStore(t)
-				path = newStoreTestPath(t, openStore, testZeroStorePath)
-			} else {
-				path = newStoreTestPath(t, s, testZeroStorePath)
-			}
-			if rawPath == "" {
-				if err := path.Close(); err != nil {
-					t.Fatalf("Path.Close() error = %v", err)
-				}
-			}
+			s, path := tt.setup(t)
 			got, err := s.PrintPath(path)
 			if tt.wantErr {
 				if err == nil {
@@ -222,8 +272,8 @@ func TestStore_PrintPath(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Store.PrintPath() error = %v", err)
 			}
-			if got != rawPath {
-				t.Fatalf("Store.PrintPath() = %q, want %q", got, rawPath)
+			if got != tt.want {
+				t.Fatalf("Store.PrintPath() = %q, want %q", got, tt.want)
 			}
 		})
 	}
