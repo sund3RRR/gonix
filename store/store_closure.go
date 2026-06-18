@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
-	"github.com/sund3RRR/gonix/internal/utils"
 	"github.com/sund3RRR/gonix/nixcontext"
+	"github.com/sund3RRR/gonix/pkg/utils"
 	"github.com/sund3RRR/gonix/storepath"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
@@ -129,7 +129,7 @@ func (s *Store) Realise(path *storepath.Path) ([]Realization, error) {
 
 	rawCtx, err := s.ctx.Borrow()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	pathPtr, err := path.Borrow()
@@ -161,14 +161,14 @@ func (s *Store) Closure(path *storepath.Path, opts ...ClosureOption) (*Closure, 
 		return nil, status.ErrClosed
 	}
 
-	rawCtx, err := s.ctx.Borrow()
-	if err != nil {
-		return nil, err
-	}
-
 	var cfg ClosureConfig
 	for _, opt := range opts {
 		opt(&cfg)
+	}
+
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	pathPtr, err := path.Borrow()
@@ -204,17 +204,13 @@ func convertClosurePaths(ctx *nixcontext.Context, paths *nix.StorePathArray) (*C
 	for i := range count {
 		pathPtr := nix.StorePathArrayPathClone(paths, i)
 		if pathPtr == nil {
-			for _, p := range closure.Paths {
-				_ = p.Close()
-			}
+			_ = closure.Close()
 			return nil, fmt.Errorf("store: failed to clone closure path from array %d: %w", i, status.FromContext(rawCtx))
 		}
 
 		path, err := storepath.New(ctx, pathPtr)
 		if err != nil {
-			for _, p := range closure.Paths {
-				_ = p.Close()
-			}
+			_ = closure.Close()
 			return nil, fmt.Errorf("store: failed to create closure path from array %d: %w", i, err)
 		}
 		closure.Paths = append(closure.Paths, path)

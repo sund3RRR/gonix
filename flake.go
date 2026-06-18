@@ -62,22 +62,22 @@ func NewFlake(
 
 	f.parsedRef, err = flake.NewParsedRef(ctx, fetchSettings, flakeSettings, ref, cfg.parseOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("flake: parse ref: %w", err)
+		return nil, fmt.Errorf("flake: failed to parse ref: %w", err)
 	}
 
 	f.lock, err = flake.NewLockedFlake(ctx, fetchSettings, flakeSettings, e, f.parsedRef, cfg.lockOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("flake: lock flake: %w", err)
+		return nil, fmt.Errorf("flake: failed to lock flake: %w", err)
 	}
 
 	var projection []byte
 	projection, err = scripts.Projections.ReadFile(packageProjectionPath)
 	if err != nil {
-		return nil, fmt.Errorf("flake: read package projection: %w", err)
+		return nil, fmt.Errorf("flake: failed to read package projection: %w", err)
 	}
 	f.packageProjection, err = e.EvalString(string(projection), packageProjectionPath)
 	if err != nil {
-		return nil, fmt.Errorf("flake: evaluate package projection: %w", err)
+		return nil, fmt.Errorf("flake: failed to evaluate package projection: %w", err)
 	}
 
 	return f, nil
@@ -96,7 +96,7 @@ func (c *Flake) FetchPackage(name string, opts ...FetchPackageOption) (Package, 
 
 	outputs, err := c.lock.OutputAttrs()
 	if err != nil {
-		return Package{}, fmt.Errorf("flake: fetch package: output attrs: %w", err)
+		return Package{}, fmt.Errorf("flake: failed to fetch package: output attrs: %w", err)
 	}
 	defer outputs.Close() //nolint:errcheck
 
@@ -110,19 +110,19 @@ func (c *Flake) FetchPackage(name string, opts ...FetchPackageOption) (Package, 
 
 	arg, err := c.evaluator.NewValue(eval.Attrs(args))
 	if err != nil {
-		return Package{}, fmt.Errorf("flake: fetch package: build projection argument: %w", err)
+		return Package{}, fmt.Errorf("flake: failed to fetch package: build projection argument: %w", err)
 	}
 	defer arg.Close() //nolint:errcheck
 
 	value, err := c.evaluator.Call(c.packageProjection, arg)
 	if err != nil {
-		return Package{}, fmt.Errorf("flake: fetch package: call projection: %w", err)
+		return Package{}, fmt.Errorf("flake: failed to fetch package: call projection: %w", err)
 	}
 	defer value.Close() //nolint:errcheck
 
 	var pkg Package
 	if err := c.evaluator.Unmarshal(value, &pkg); err != nil {
-		return Package{}, fmt.Errorf("flake: fetch package: unmarshal package: %w", err)
+		return Package{}, fmt.Errorf("flake: failed to fetch package: unmarshal package: %w", err)
 	}
 
 	return pkg, nil
@@ -139,21 +139,21 @@ func (c *Flake) DownloadPackage(pkg Package) ([]DownloadedPackageOutput, error) 
 	}
 
 	if pkg.Type != "" && pkg.Type != PackageTypeDerivation {
-		return nil, fmt.Errorf("flake: download package: unsupported package type %q", pkg.Type)
+		return nil, fmt.Errorf("flake: failed to download package: unsupported package type %q", pkg.Type)
 	}
 	if pkg.DrvPath == "" {
-		return nil, fmt.Errorf("flake: download package: missing drvPath")
+		return nil, fmt.Errorf("flake: failed to download package: missing drvPath")
 	}
 
 	drvPath, err := c.store.ParsePath(pkg.DrvPath)
 	if err != nil {
-		return nil, fmt.Errorf("flake: download package: parse drv path: %w", err)
+		return nil, fmt.Errorf("flake: failed to download package: parse drv path: %w", err)
 	}
 	defer drvPath.Close() //nolint:errcheck
 
 	realizations, err := c.store.Realise(drvPath)
 	if err != nil {
-		return nil, fmt.Errorf("flake: download package: realise package: %w", err)
+		return nil, fmt.Errorf("flake: failed to download package: realise package: %w", err)
 	}
 	defer func() {
 		for i := range realizations {
@@ -165,17 +165,17 @@ func (c *Flake) DownloadPackage(pkg Package) ([]DownloadedPackageOutput, error) 
 	for i := range realizations {
 		realizedPath := realizations[i].Path
 		if realizedPath == nil {
-			return nil, fmt.Errorf("flake: download package: realization %q has nil path", realizations[i].OutputName)
+			return nil, fmt.Errorf("flake: failed to download package: realization %q has nil path", realizations[i].OutputName)
 		}
 
 		storePath, err := c.store.PrintPath(realizedPath)
 		if err != nil {
-			return nil, fmt.Errorf("flake: download package: print output path %q: %w", realizations[i].OutputName, err)
+			return nil, fmt.Errorf("flake: failed to download package: print output path %q: %w", realizations[i].OutputName, err)
 		}
 
 		realPath, err := c.store.RealPath(realizedPath)
 		if err != nil {
-			return nil, fmt.Errorf("flake: download package: real output path %q: %w", realizations[i].OutputName, err)
+			return nil, fmt.Errorf("flake: failed to download package: real output path %q: %w", realizations[i].OutputName, err)
 		}
 
 		outputs = append(outputs, DownloadedPackageOutput{

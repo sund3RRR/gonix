@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
-	"github.com/sund3RRR/gonix/internal/utils"
 	"github.com/sund3RRR/gonix/nixcontext"
+	"github.com/sund3RRR/gonix/pkg/utils"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -15,37 +15,26 @@ type ValueType int
 const (
 	// ValueTypeThunk is a deferred Nix expression.
 	ValueTypeThunk ValueType = iota
-
 	// ValueTypeInt is a Nix integer.
 	ValueTypeInt
-
 	// ValueTypeFloat is a Nix floating-point number.
 	ValueTypeFloat
-
 	// ValueTypeBool is a Nix boolean.
 	ValueTypeBool
-
 	// ValueTypeString is a Nix string.
 	ValueTypeString
-
 	// ValueTypePath is a Nix path.
 	ValueTypePath
-
 	// ValueTypeNull is Nix null.
 	ValueTypeNull
-
 	// ValueTypeAttrs is a Nix attribute set.
 	ValueTypeAttrs
-
 	// ValueTypeList is a Nix list.
 	ValueTypeList
-
 	// ValueTypeFunction is a Nix function.
 	ValueTypeFunction
-
 	// ValueTypeExternal is an external value.
 	ValueTypeExternal
-
 	// ValueTypeFailed is a failed value.
 	ValueTypeFailed
 )
@@ -100,7 +89,7 @@ func (v *Value) Type() (ValueType, error) {
 
 	rawCtx, err := v.ctx.Borrow()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	typ := nix.GetType(rawCtx, v.ptr)
@@ -119,7 +108,7 @@ func (v *Value) TypeName() (string, error) {
 
 	rawCtx, err := v.ctx.Borrow()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	ptr := nix.GetTypename(rawCtx, v.ptr)
@@ -138,7 +127,7 @@ func (v *Value) Bool() (bool, error) {
 
 	rawCtx, err := v.ctx.Borrow()
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	got := nix.GetBool(rawCtx, v.ptr)
@@ -157,7 +146,7 @@ func (v *Value) Int() (int64, error) {
 
 	rawCtx, err := v.ctx.Borrow()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	got := nix.GetInt(rawCtx, v.ptr)
@@ -176,7 +165,7 @@ func (v *Value) Float() (float64, error) {
 
 	rawCtx, err := v.ctx.Borrow()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	got := nix.GetFloat(rawCtx, v.ptr)
@@ -195,7 +184,7 @@ func (v *Value) String() (string, error) {
 
 	rawCtx, err := v.ctx.Borrow()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	ptr := nix.GetString(rawCtx, v.ptr)
@@ -214,7 +203,7 @@ func (v *Value) PathString() (string, error) {
 
 	rawCtx, err := v.ctx.Borrow()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	ptr := nix.GetPathString(rawCtx, v.ptr)
@@ -233,7 +222,7 @@ func (v *Value) ListLen() (uint32, error) {
 
 	rawCtx, err := v.ctx.Borrow()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	got := nix.GetListSize(rawCtx, v.ptr)
@@ -252,7 +241,7 @@ func (v *Value) AttrLen() (uint32, error) {
 
 	rawCtx, err := v.ctx.Borrow()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	got := nix.GetAttrsSize(rawCtx, v.ptr)
@@ -272,9 +261,6 @@ func (v *Value) Borrow() (*nix.NixValue, error) {
 	if v.ptr == nil {
 		return nil, status.ErrClosed
 	}
-	if _, err := v.ctx.Borrow(); err != nil {
-		return nil, err
-	}
 
 	return v.ptr, nil
 }
@@ -290,7 +276,7 @@ func (v *Value) Close() error {
 
 	rawCtx, err := v.ctx.Borrow()
 	if err != nil {
-		return fmt.Errorf("eval: borrow context while closing value: %w", err)
+		return fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	defer func() {

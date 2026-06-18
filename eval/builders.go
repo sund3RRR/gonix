@@ -2,6 +2,7 @@ package eval
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 
 	"github.com/sund3RRR/gonix/internal/status"
@@ -19,11 +20,13 @@ func Null() GoValue {
 	return GoValue(func(e *Evaluator, out *nix.NixValue) error {
 		rawCtx, err := e.ctx.Borrow()
 		if err != nil {
-			return err
+			return fmt.Errorf("eval: failed to borrow context: %w", err)
 		}
+
 		if code := nix.InitNull(rawCtx, out); status.ErrorCode(code) != status.ErrorCodeOK {
 			return fmt.Errorf("eval: failed to initialize null: %w", status.FromContext(rawCtx))
 		}
+
 		return nil
 	})
 }
@@ -33,11 +36,13 @@ func Bool(value bool) GoValue {
 	return GoValue(func(e *Evaluator, out *nix.NixValue) error {
 		rawCtx, err := e.ctx.Borrow()
 		if err != nil {
-			return err
+			return fmt.Errorf("eval: failed to borrow context: %w", err)
 		}
+
 		if code := nix.InitBool(rawCtx, out, value); status.ErrorCode(code) != status.ErrorCodeOK {
 			return fmt.Errorf("eval: failed to initialize bool: %w", status.FromContext(rawCtx))
 		}
+
 		return nil
 	})
 }
@@ -47,11 +52,13 @@ func Int(value int64) GoValue {
 	return GoValue(func(e *Evaluator, out *nix.NixValue) error {
 		rawCtx, err := e.ctx.Borrow()
 		if err != nil {
-			return err
+			return fmt.Errorf("eval: failed to borrow context: %w", err)
 		}
+
 		if code := nix.InitInt(rawCtx, out, value); status.ErrorCode(code) != status.ErrorCodeOK {
 			return fmt.Errorf("eval: failed to initialize int: %w", status.FromContext(rawCtx))
 		}
+
 		return nil
 	})
 }
@@ -61,11 +68,13 @@ func Float(value float64) GoValue {
 	return GoValue(func(e *Evaluator, out *nix.NixValue) error {
 		rawCtx, err := e.ctx.Borrow()
 		if err != nil {
-			return err
+			return fmt.Errorf("eval: failed to borrow context: %w", err)
 		}
+
 		if code := nix.InitFloat(rawCtx, out, value); status.ErrorCode(code) != status.ErrorCodeOK {
 			return fmt.Errorf("eval: failed to initialize float: %w", status.FromContext(rawCtx))
 		}
+
 		return nil
 	})
 }
@@ -75,11 +84,13 @@ func String(value string) GoValue {
 	return GoValue(func(e *Evaluator, out *nix.NixValue) error {
 		rawCtx, err := e.ctx.Borrow()
 		if err != nil {
-			return err
+			return fmt.Errorf("eval: failed to borrow context: %w", err)
 		}
+
 		if code := nix.InitString(rawCtx, out, value); status.ErrorCode(code) != status.ErrorCodeOK {
 			return fmt.Errorf("eval: failed to initialize string: %w", status.FromContext(rawCtx))
 		}
+
 		return nil
 	})
 }
@@ -89,11 +100,13 @@ func PathString(value string) GoValue {
 	return GoValue(func(e *Evaluator, out *nix.NixValue) error {
 		rawCtx, err := e.ctx.Borrow()
 		if err != nil {
-			return err
+			return fmt.Errorf("eval: failed to borrow context: %w", err)
 		}
+
 		if code := nix.InitPathString(rawCtx, e.state, out, value); status.ErrorCode(code) != status.ErrorCodeOK {
 			return fmt.Errorf("eval: failed to initialize path string: %w", status.FromContext(rawCtx))
 		}
+
 		return nil
 	})
 }
@@ -104,23 +117,21 @@ func List(values ...GoValue) GoValue {
 	return GoValue(func(e *Evaluator, out *nix.NixValue) error {
 		rawCtx, err := e.ctx.Borrow()
 		if err != nil {
-			return err
+			return fmt.Errorf("eval: failed to borrow context: %w", err)
 		}
+
 		builder := nix.MakeListBuilder(rawCtx, e.state, uint64(len(copied)))
 		if builder == nil {
 			return fmt.Errorf("eval: failed to create list builder: %w", status.FromContext(rawCtx))
 		}
 		defer nix.ListBuilderFree(builder)
 
-		temps := make([]*Value, 0, len(copied))
-		defer closeValues(temps)
-
 		for i, item := range copied {
 			value, err := e.NewValue(item)
 			if err != nil {
 				return fmt.Errorf("eval: failed to build list item %d: %w", i, err)
 			}
-			temps = append(temps, value)
+			defer value.Close() //nolint:errcheck
 
 			if code := nix.ListBuilderInsert(rawCtx, builder, uint32(i), value.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 				return fmt.Errorf("eval: failed to insert list item %d: %w", i, status.FromContext(rawCtx))
@@ -138,15 +149,14 @@ func List(values ...GoValue) GoValue {
 // Attrs returns a GoValue that initializes a Nix attribute set.
 func Attrs(values map[string]GoValue) GoValue {
 	copied := make(map[string]GoValue, len(values))
-	for k, v := range values {
-		copied[k] = v
-	}
+	maps.Copy(copied, values)
 
 	return GoValue(func(e *Evaluator, out *nix.NixValue) error {
 		rawCtx, err := e.ctx.Borrow()
 		if err != nil {
-			return err
+			return fmt.Errorf("eval: failed to borrow context: %w", err)
 		}
+
 		builder := nix.MakeBindingsBuilder(rawCtx, e.state, uint64(len(copied)))
 		if builder == nil {
 			return fmt.Errorf("eval: failed to create attrs builder: %w", status.FromContext(rawCtx))
@@ -159,15 +169,12 @@ func Attrs(values map[string]GoValue) GoValue {
 		}
 		sort.Strings(names)
 
-		temps := make([]*Value, 0, len(copied))
-		defer closeValues(temps)
-
 		for _, name := range names {
 			value, err := e.NewValue(copied[name])
 			if err != nil {
 				return fmt.Errorf("eval: failed to build attr %q: %w", name, err)
 			}
-			temps = append(temps, value)
+			defer value.Close() //nolint:errcheck
 
 			if code := nix.BindingsBuilderInsert(rawCtx, builder, name, value.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 				return fmt.Errorf("eval: failed to insert attr %q: %w", name, status.FromContext(rawCtx))
@@ -187,8 +194,9 @@ func Apply(fn, arg *Value) GoValue {
 	return GoValue(func(e *Evaluator, out *nix.NixValue) error {
 		rawCtx, err := e.ctx.Borrow()
 		if err != nil {
-			return err
+			return fmt.Errorf("eval: failed to borrow context: %w", err)
 		}
+
 		if err := e.validateValue(fn); err != nil {
 			return fmt.Errorf("eval: failed to validate function value: %w", err)
 		}
@@ -210,8 +218,9 @@ func Copy(src *Value) GoValue {
 	return GoValue(func(e *Evaluator, out *nix.NixValue) error {
 		rawCtx, err := e.ctx.Borrow()
 		if err != nil {
-			return err
+			return fmt.Errorf("eval: failed to borrow context: %w", err)
 		}
+
 		if err := e.validateValue(src); err != nil {
 			return fmt.Errorf("eval: failed to validate source value: %w", err)
 		}
@@ -222,10 +231,4 @@ func Copy(src *Value) GoValue {
 
 		return nil
 	})
-}
-
-func closeValues(values []*Value) {
-	for _, value := range values {
-		_ = value.Close()
-	}
 }

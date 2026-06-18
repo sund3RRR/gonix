@@ -11,8 +11,8 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
-	"github.com/sund3RRR/gonix/internal/utils"
 	"github.com/sund3RRR/gonix/nixcontext"
+	"github.com/sund3RRR/gonix/pkg/utils"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -42,14 +42,14 @@ type Store struct {
 // caller. The ctx argument is borrowed and must remain valid for as long as the
 // Store is used.
 func New(ctx *nixcontext.Context, uri string, opts ...Option) (*Store, error) {
-	rawCtx, err := ctx.Borrow()
-	if err != nil {
-		return nil, fmt.Errorf("store: borrow context: %w", err)
-	}
-
 	var cfg Config
 	for _, opt := range opts {
 		opt(&cfg)
+	}
+
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	params, err := cfg.Params()
@@ -100,7 +100,7 @@ func (s *Store) Version() (string, error) {
 
 	rawCtx, err := s.ctx.Borrow()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	ptr := nix.StoreGetVersion(rawCtx, s.ptr)
@@ -123,9 +123,6 @@ func (s *Store) Version() (string, error) {
 func (p *Store) Borrow() (*nix.Store, error) {
 	if p.ptr == nil {
 		return nil, status.ErrClosed
-	}
-	if _, err := p.ctx.Borrow(); err != nil {
-		return nil, err
 	}
 
 	return p.ptr, nil

@@ -30,7 +30,7 @@ type Evaluator struct {
 func New(ctx *nixcontext.Context, s *store.Store, opts ...Option) (*Evaluator, error) {
 	rawCtx, err := ctx.Borrow()
 	if err != nil {
-		return nil, fmt.Errorf("eval: borrow context: %w", err)
+		return nil, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	var cfg config
@@ -86,9 +86,6 @@ func (e *Evaluator) Borrow() (*nix.EvalState, error) {
 	if e.state == nil {
 		return nil, status.ErrClosed
 	}
-	if _, err := e.ctx.Borrow(); err != nil {
-		return nil, err
-	}
 
 	return e.state, nil
 }
@@ -102,9 +99,6 @@ func (e *Evaluator) Borrow() (*nix.EvalState, error) {
 func (e *Evaluator) WrapValue(ptr *nix.NixValue) (*Value, error) {
 	if e.state == nil {
 		return nil, status.ErrClosed
-	}
-	if _, err := e.ctx.Borrow(); err != nil {
-		return nil, err
 	}
 
 	value := &Value{
@@ -137,6 +131,7 @@ func (e *Evaluator) Close() error {
 	e.state = nil
 	e.values = nil
 	e.store = nil
+	e.ctx = nil
 
 	if len(errs) != 0 {
 		return fmt.Errorf("eval: failed to close evaluator: %w", errors.Join(errs...))
@@ -152,7 +147,7 @@ func (e *Evaluator) allocValue() (*Value, error) {
 
 	rawCtx, err := e.ctx.Borrow()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	ptr := nix.AllocValue(rawCtx, e.state)
@@ -174,12 +169,11 @@ func (e *Evaluator) validateValue(v *Value) error {
 	if e.state == nil {
 		return status.ErrClosed
 	}
-	if _, err := e.ctx.Borrow(); err != nil {
-		return err
-	}
+
 	if v == nil {
 		return fmt.Errorf("eval: value is nil")
 	}
+
 	if v.ptr == nil {
 		return status.ErrClosed
 	}

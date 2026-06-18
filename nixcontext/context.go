@@ -9,7 +9,7 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
-	"github.com/sund3RRR/gonix/internal/utils"
+	"github.com/sund3RRR/gonix/pkg/utils"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -127,7 +127,7 @@ func (c *Context) Setting(key string) (string, error) {
 
 	value := nix.SettingGet(ptr, key)
 	if value == nil {
-		return "", fmt.Errorf("nixcontext: get setting %q: %w", key, status.FromContext(ptr))
+		return "", fmt.Errorf("nixcontext: failed to get setting %q: %w", key, status.FromContext(ptr))
 	}
 
 	return utils.TakeCString(value), nil
@@ -141,7 +141,7 @@ func (c *Context) SetSetting(key, value string) error {
 	}
 
 	if code := nix.SettingSet(ptr, key, value); status.ErrorCode(code) != status.ErrorCodeOK {
-		return fmt.Errorf("nixcontext: set setting %q: %w", key, status.FromContext(ptr))
+		return fmt.Errorf("nixcontext: failed to set setting %q: %w", key, status.FromContext(ptr))
 	}
 
 	return nil
@@ -164,7 +164,7 @@ func (c *Context) SetVerbosity(level Verbosity) error {
 
 	rawLevel := nix.NixVerbosity(level - VerbosityError)
 	if code := nix.SetVerbosity(ptr, rawLevel); status.ErrorCode(code) != status.ErrorCodeOK {
-		return fmt.Errorf("nixcontext: set verbosity: %w", status.FromContext(ptr))
+		return fmt.Errorf("nixcontext: failed to set verbosity: %w", status.FromContext(ptr))
 	}
 
 	return nil
@@ -183,7 +183,7 @@ func (c *Context) SetLogFormat(format LogFormat) error {
 	}
 
 	if code := nix.SetLogFormat(ptr, string(format)); status.ErrorCode(code) != status.ErrorCodeOK {
-		return fmt.Errorf("nixcontext: set log format: %w", status.FromContext(ptr))
+		return fmt.Errorf("nixcontext: failed to set log format: %w", status.FromContext(ptr))
 	}
 
 	return nil

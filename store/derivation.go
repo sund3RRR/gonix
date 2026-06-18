@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
-	"github.com/sund3RRR/gonix/internal/utils"
 	"github.com/sund3RRR/gonix/nixcontext"
+	"github.com/sund3RRR/gonix/pkg/utils"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -47,7 +47,7 @@ func (d *Derivation) JSON() ([]byte, error) {
 
 	rawCtx, err := d.ctx.Borrow()
 	if err != nil {
-		return nil, fmt.Errorf("derivation: borrow context: %w", err)
+		return nil, fmt.Errorf("derivation: failed to borrow context: %w", err)
 	}
 
 	rawJSON := nix.DerivationToJson(rawCtx, d.ptr)
@@ -68,7 +68,7 @@ func (d *Derivation) Clone() (*Derivation, error) {
 
 	rawCtx, err := d.ctx.Borrow()
 	if err != nil {
-		return nil, fmt.Errorf("derivation: borrow context: %w", err)
+		return nil, fmt.Errorf("derivation: failed to borrow context: %w", err)
 	}
 
 	clone := nix.DerivationClone(d.ptr)
@@ -87,9 +87,6 @@ func (d *Derivation) Clone() (*Derivation, error) {
 func (d *Derivation) Borrow() (*nix.NixDerivation, error) {
 	if d.ptr == nil {
 		return nil, status.ErrClosed
-	}
-	if _, err := d.ctx.Borrow(); err != nil {
-		return nil, err
 	}
 
 	return d.ptr, nil

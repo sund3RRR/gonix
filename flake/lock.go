@@ -17,10 +17,8 @@ type LockMode int
 const (
 	// LockModeVirtual resolves the lock in memory without writing flake.lock.
 	LockModeVirtual LockMode = iota
-
 	// LockModeCheck fails unless the existing lock file is already usable.
 	LockModeCheck
-
 	// LockModeWriteAsNeeded creates or updates flake.lock when needed.
 	LockModeWriteAsNeeded
 )
@@ -50,6 +48,11 @@ func NewLockedFlake(
 	ref *Ref,
 	opts ...LockOption,
 ) (*LockedFlake, error) {
+	var cfg lockConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	rawCtx, err := ctx.Borrow()
 	if err != nil {
 		return nil, fmt.Errorf("flake: borrow context: %w", err)
@@ -63,11 +66,6 @@ func NewLockedFlake(
 	refPtr, err := ref.Borrow()
 	if err != nil {
 		return nil, fmt.Errorf("flake: failed to borrow reference: %w", err)
-	}
-
-	var cfg lockConfig
-	for _, opt := range opts {
-		opt(&cfg)
 	}
 
 	fetchSettingsPtr, err := fetchSettings.Borrow()
@@ -121,7 +119,7 @@ func (l *LockedFlake) OutputAttrs() (*eval.Value, error) {
 
 	rawCtx, err := l.ctx.Borrow()
 	if err != nil {
-		return nil, fmt.Errorf("flake: borrow context: %w", err)
+		return nil, fmt.Errorf("flake: failed to borrow context: %w", err)
 	}
 
 	state, err := l.evaluator.Borrow()
@@ -158,9 +156,6 @@ func (l *LockedFlake) OutputAttrs() (*eval.Value, error) {
 func (l *LockedFlake) Borrow() (*nix.NixLockedFlake, error) {
 	if l.ptr == nil {
 		return nil, status.ErrClosed
-	}
-	if _, err := l.ctx.Borrow(); err != nil {
-		return nil, err
 	}
 
 	return l.ptr, nil

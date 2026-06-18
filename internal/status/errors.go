@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/sund3RRR/gonix/internal/utils"
+	"github.com/sund3RRR/gonix/pkg/utils"
 	raw "github.com/sund3RRR/nix-go-bindings"
 )
 

@@ -27,7 +27,7 @@ type Settings struct {
 func NewSettings(ctx *nixcontext.Context) (*Settings, error) {
 	rawCtx, err := ctx.Borrow()
 	if err != nil {
-		return nil, fmt.Errorf("fetchers: borrow context: %w", err)
+		return nil, fmt.Errorf("fetchers: failed to borrow context: %w", err)
 	}
 
 	ptr := nix.FetchersSettingsNew(rawCtx)
@@ -49,9 +49,6 @@ func NewSettings(ctx *nixcontext.Context) (*Settings, error) {
 func (s *Settings) Borrow() (*nix.NixFetchersSettings, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed
-	}
-	if _, err := s.ctx.Borrow(); err != nil {
-		return nil, err
 	}
 
 	return s.ptr, nil

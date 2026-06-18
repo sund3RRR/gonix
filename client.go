@@ -35,7 +35,7 @@ type Client struct {
 func NewClient(cfg ClientConfig) (*Client, error) {
 	ctx, err := nixcontext.New(nixcontext.Config{LoadConfig: cfg.LoadConfig})
 	if err != nil {
-		return nil, fmt.Errorf("client: create context: %w", err)
+		return nil, fmt.Errorf("client: failed to create context: %w", err)
 	}
 
 	c := &Client{ctx: ctx}
@@ -49,20 +49,20 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 		return nil, err
 	}
 	if err = ctx.SetVerbosity(cfg.Verbosity); err != nil {
-		return nil, fmt.Errorf("client: set verbosity: %w", err)
+		return nil, fmt.Errorf("client: failed to set verbosity: %w", err)
 	}
 	if err = ctx.SetLogFormat(cfg.LogFormat); err != nil {
-		return nil, fmt.Errorf("client: set log format: %w", err)
+		return nil, fmt.Errorf("client: failed to set log format: %w", err)
 	}
 
 	c.fetcherSettings, err = fetchers.NewSettings(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("client: create fetcher settings: %w", err)
+		return nil, fmt.Errorf("client: failed to create fetcher settings: %w", err)
 	}
 
 	c.flakeSettings, err = flakesettings.New(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("client: create flake settings: %w", err)
+		return nil, fmt.Errorf("client: failed to create flake settings: %w", err)
 	}
 
 	storeURI := cfg.Store.URI
@@ -71,14 +71,14 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 	}
 	c.store, err = store.New(ctx, storeURI, cfg.Store.Opts...)
 	if err != nil {
-		return nil, fmt.Errorf("client: open store: %w", err)
+		return nil, fmt.Errorf("client: failed to open store: %w", err)
 	}
 
 	evalOpts := append([]eval.Option(nil), cfg.Eval.Opts...)
 	evalOpts = append(evalOpts, eval.WithFlakeSettings(c.flakeSettings))
 	c.evaluator, err = eval.New(ctx, c.store, evalOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("client: create evaluator: %w", err)
+		return nil, fmt.Errorf("client: failed to create evaluator: %w", err)
 	}
 
 	return c, nil
@@ -95,7 +95,7 @@ func (c *Client) NewFlake(ref string, opts ...FlakeOption) (*Flake, error) {
 
 	f, err := NewFlake(c.ctx, c.fetcherSettings, c.flakeSettings, c.store, c.evaluator, ref, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("client: create flake: %w", err)
+		return nil, fmt.Errorf("client: failed to create flake: %w", err)
 	}
 
 	c.resources = append(c.resources, f)
@@ -144,7 +144,7 @@ func (c *Client) Close() error {
 	c.ctx = nil
 
 	if len(errs) != 0 {
-		return fmt.Errorf("client: close resources: %w", errors.Join(errs...))
+		return fmt.Errorf("client: failed to close resources: %w", errors.Join(errs...))
 	}
 
 	return nil
@@ -153,7 +153,7 @@ func (c *Client) Close() error {
 func applyClientSettings(ctx *nixcontext.Context, settings map[string]string) error {
 	if value, ok := settings[settingExperimentalFeatures]; ok {
 		if err := ctx.SetSetting(settingExperimentalFeatures, value); err != nil {
-			return fmt.Errorf("client: set %q: %w", settingExperimentalFeatures, err)
+			return fmt.Errorf("client: failed to set %q: %w", settingExperimentalFeatures, err)
 		}
 	}
 
@@ -167,7 +167,7 @@ func applyClientSettings(ctx *nixcontext.Context, settings map[string]string) er
 
 	for _, key := range keys {
 		if err := ctx.SetSetting(key, settings[key]); err != nil {
-			return fmt.Errorf("client: set %q: %w", key, err)
+			return fmt.Errorf("client: failed to set %q: %w", key, err)
 		}
 	}
 

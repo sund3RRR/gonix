@@ -48,7 +48,7 @@ func (s *Store) CopyClosure(dst *Store, path *storepath.Path) error {
 
 	rawCtx, err := s.ctx.Borrow()
 	if err != nil {
-		return err
+		return fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	dstPtr, err := dst.Borrow()
@@ -78,19 +78,19 @@ func (s *Store) CopyPathTo(dst *Store, path *storepath.Path, opts ...CopyOption)
 		return status.ErrClosed
 	}
 
+	var cfg CopyConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	rawCtx, err := s.ctx.Borrow()
 	if err != nil {
-		return err
+		return fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	dstPtr, err := dst.Borrow()
 	if err != nil {
 		return fmt.Errorf("store: failed to borrow dst store: %w", err)
-	}
-
-	var cfg CopyConfig
-	for _, opt := range opts {
-		opt(&cfg)
 	}
 
 	pathPtr, err := path.Borrow()

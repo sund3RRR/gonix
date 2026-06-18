@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
-	"github.com/sund3RRR/gonix/internal/utils"
+	"github.com/sund3RRR/gonix/pkg/utils"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -20,7 +20,7 @@ func (e *Evaluator) EvalString(expr, path string) (*Value, error) {
 
 	rawCtx, err := e.ctx.Borrow()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	value, err := e.allocValue()
@@ -40,9 +40,6 @@ func (e *Evaluator) EvalString(expr, path string) (*Value, error) {
 func (e *Evaluator) NewValue(gv GoValue) (*Value, error) {
 	if e.state == nil {
 		return nil, status.ErrClosed
-	}
-	if _, err := e.ctx.Borrow(); err != nil {
-		return nil, err
 	}
 
 	value, err := e.allocValue()
@@ -66,7 +63,7 @@ func (e *Evaluator) Force(v *Value) error {
 
 	rawCtx, err := e.ctx.Borrow()
 	if err != nil {
-		return err
+		return fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	if err := e.validateValue(v); err != nil {
@@ -88,7 +85,7 @@ func (e *Evaluator) ForceDeep(v *Value) error {
 
 	rawCtx, err := e.ctx.Borrow()
 	if err != nil {
-		return err
+		return fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	if err := e.validateValue(v); err != nil {
@@ -110,7 +107,7 @@ func (e *Evaluator) Call(fn, arg *Value) (*Value, error) {
 
 	rawCtx, err := e.ctx.Borrow()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	if err := e.validateValue(fn); err != nil {
@@ -125,6 +122,7 @@ func (e *Evaluator) Call(fn, arg *Value) (*Value, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if code := nix.ValueCall(rawCtx, e.state, fn.ptr, arg.ptr, out.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 		_ = out.Close()
 		return nil, fmt.Errorf("eval: failed to call function: %w", status.FromContext(rawCtx))
@@ -141,7 +139,7 @@ func (e *Evaluator) CallMulti(fn *Value, args ...*Value) (*Value, error) {
 
 	rawCtx, err := e.ctx.Borrow()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	if err := e.validateValue(fn); err != nil {
@@ -160,10 +158,12 @@ func (e *Evaluator) CallMulti(fn *Value, args ...*Value) (*Value, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	valueArray := nix.ValueArray{
 		Items: items,
 		Len:   uint64(len(items)),
 	}
+
 	if code := nix.ValueCallMulti(rawCtx, e.state, fn.ptr, valueArray, out.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 		_ = out.Close()
 		return nil, fmt.Errorf("eval: failed to call function with arguments: %w", status.FromContext(rawCtx))
@@ -180,7 +180,7 @@ func (e *Evaluator) Index(v *Value, index uint32) (*Value, error) {
 
 	rawCtx, err := e.ctx.Borrow()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	if err := e.validateValue(v); err != nil {
@@ -208,7 +208,7 @@ func (e *Evaluator) Attr(v *Value, name string) (*Value, error) {
 
 	rawCtx, err := e.ctx.Borrow()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	if err := e.validateValue(v); err != nil {
@@ -236,7 +236,7 @@ func (e *Evaluator) AttrByIndex(v *Value, index uint32) (*Value, error) {
 
 	rawCtx, err := e.ctx.Borrow()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	if err := e.validateValue(v); err != nil {
@@ -264,7 +264,7 @@ func (e *Evaluator) AttrName(v *Value, index uint32) (string, error) {
 
 	rawCtx, err := e.ctx.Borrow()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	if err := e.validateValue(v); err != nil {
@@ -287,7 +287,7 @@ func (e *Evaluator) HasAttr(v *Value, name string) (bool, error) {
 
 	rawCtx, err := e.ctx.Borrow()
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	if err := e.validateValue(v); err != nil {

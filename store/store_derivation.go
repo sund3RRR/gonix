@@ -20,7 +20,7 @@ func (s *Store) DerivationFromJSON(data []byte) (*Derivation, error) {
 
 	rawCtx, err := s.ctx.Borrow()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	ptr := nix.DerivationFromJson(rawCtx, s.ptr, string(data))
@@ -42,7 +42,7 @@ func (s *Store) DerivationFromPath(path *storepath.Path) (*Derivation, error) {
 
 	rawCtx, err := s.ctx.Borrow()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	pathPtr, err := path.Borrow()
@@ -69,7 +69,7 @@ func (s *Store) AddDerivation(d *Derivation) (*storepath.Path, error) {
 
 	rawCtx, err := s.ctx.Borrow()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	drvPtr, err := d.Borrow()

@@ -26,7 +26,7 @@ type Settings struct {
 func New(ctx *nixcontext.Context) (*Settings, error) {
 	rawCtx, err := ctx.Borrow()
 	if err != nil {
-		return nil, fmt.Errorf("flake: borrow context: %w", err)
+		return nil, fmt.Errorf("flake: failed to borrow context: %w", err)
 	}
 
 	ptr := nix.FlakeSettingsNew(rawCtx)
@@ -48,9 +48,6 @@ func New(ctx *nixcontext.Context) (*Settings, error) {
 func (s *Settings) Borrow() (*nix.NixFlakeSettings, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed
-	}
-	if _, err := s.ctx.Borrow(); err != nil {
-		return nil, err
 	}
 
 	return s.ptr, nil

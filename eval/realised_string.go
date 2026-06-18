@@ -54,7 +54,7 @@ func (e *Evaluator) RealiseString(v *Value) (*RealisedString, error) {
 
 	rawCtx, err := e.ctx.Borrow()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
 	if err := e.validateValue(v); err != nil {

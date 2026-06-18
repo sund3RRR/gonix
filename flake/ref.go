@@ -7,8 +7,8 @@ import (
 	"github.com/sund3RRR/gonix/fetchers"
 	"github.com/sund3RRR/gonix/flakesettings"
 	"github.com/sund3RRR/gonix/internal/status"
-	"github.com/sund3RRR/gonix/internal/utils"
 	"github.com/sund3RRR/gonix/nixcontext"
+	"github.com/sund3RRR/gonix/pkg/utils"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -34,14 +34,14 @@ func NewParsedRef(
 	ref string,
 	opts ...ParseOption,
 ) (*Ref, error) {
-	rawCtx, err := ctx.Borrow()
-	if err != nil {
-		return nil, fmt.Errorf("flake: borrow context: %w", err)
-	}
-
 	var cfg parseConfig
 	for _, opt := range opts {
 		opt(&cfg)
+	}
+
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("flake: failed to borrow context: %w", err)
 	}
 
 	fetchSettingsPtr, err := fetchSettings.Borrow()

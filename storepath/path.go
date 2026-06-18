@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
-	"github.com/sund3RRR/gonix/internal/utils"
 	"github.com/sund3RRR/gonix/nixcontext"
+	"github.com/sund3RRR/gonix/pkg/utils"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -32,10 +32,7 @@ type Path struct {
 func New(ctx *nixcontext.Context, ptr *nix.StorePath) (*Path, error) {
 	rawCtx, err := ctx.Borrow()
 	if err != nil {
-		return nil, fmt.Errorf("storepath: borrow context: %w", err)
-	}
-	if ptr == nil {
-		return &Path{ctx: ctx}, nil
+		return nil, fmt.Errorf("storepath: failed to borrow context: %w", err)
 	}
 
 	namePtr := nix.StorePathName(ptr)
@@ -65,7 +62,7 @@ func New(ctx *nixcontext.Context, ptr *nix.StorePath) (*Path, error) {
 func FromParts(ctx *nixcontext.Context, hash [20]byte, name string) (*Path, error) {
 	rawCtx, err := ctx.Borrow()
 	if err != nil {
-		return nil, fmt.Errorf("storepath: borrow context: %w", err)
+		return nil, fmt.Errorf("storepath: failed to borrow context: %w", err)
 	}
 
 	rawHash := nix.StorePathHashPart{Bytes: hash}
@@ -102,7 +99,7 @@ func (p *Path) Clone() (*Path, error) {
 
 	rawCtx, err := p.ctx.Borrow()
 	if err != nil {
-		return nil, fmt.Errorf("storepath: borrow context: %w", err)
+		return nil, fmt.Errorf("storepath: failed to borrow context: %w", err)
 	}
 
 	clonePtr := nix.StorePathClone(p.ptr)
@@ -126,9 +123,6 @@ func (p *Path) Clone() (*Path, error) {
 func (p *Path) Borrow() (*nix.StorePath, error) {
 	if p.ptr == nil {
 		return nil, status.ErrClosed
-	}
-	if _, err := p.ctx.Borrow(); err != nil {
-		return nil, err
 	}
 
 	return p.ptr, nil

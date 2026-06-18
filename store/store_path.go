@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
-	"github.com/sund3RRR/gonix/internal/utils"
+	"github.com/sund3RRR/gonix/pkg/utils"
 	"github.com/sund3RRR/gonix/storepath"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
@@ -20,7 +20,7 @@ func (s *Store) URI() (string, error) {
 
 	rawCtx, err := s.ctx.Borrow()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	ptr := nix.StoreGetUri(rawCtx, s.ptr)
@@ -41,7 +41,7 @@ func (s *Store) StoreDir() (string, error) {
 
 	rawCtx, err := s.ctx.Borrow()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	ptr := nix.StoreGetStoredir(rawCtx, s.ptr)
@@ -64,7 +64,7 @@ func (s *Store) ParsePath(pathStr string) (*storepath.Path, error) {
 
 	rawCtx, err := s.ctx.Borrow()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	ptr := nix.StoreParsePath(rawCtx, s.ptr, pathStr)
@@ -92,7 +92,7 @@ func (s *Store) PrintPath(path *storepath.Path) (string, error) {
 
 	rawCtx, err := s.ctx.Borrow()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	pathPtr, err := path.Borrow()
@@ -120,7 +120,7 @@ func (s *Store) PathFromHash(hashPart []byte) (*storepath.Path, error) {
 
 	rawCtx, err := s.ctx.Borrow()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	ptr := nix.StoreQueryPathFromHashPart(rawCtx, s.ptr, string(hashPart))
@@ -149,7 +149,7 @@ func (s *Store) RealPath(path *storepath.Path) (string, error) {
 
 	rawCtx, err := s.ctx.Borrow()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	pathPtr, err := path.Borrow()
@@ -177,7 +177,7 @@ func (s *Store) IsValidPath(path *storepath.Path) (bool, error) {
 
 	rawCtx, err := s.ctx.Borrow()
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
 	pathPtr, err := path.Borrow()
