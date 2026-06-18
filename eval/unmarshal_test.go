@@ -71,6 +71,7 @@ func TestEvaluatorUnmarshalPackage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(package) error = %v", err)
 	}
+	closeValueAtCleanup(t, value)
 
 	var got unmarshalPackage
 	got.Skipped = "kept"
@@ -111,6 +112,7 @@ func TestEvaluatorUnmarshalOptionalAndNullPointers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(attrs) error = %v", err)
 	}
+	closeValueAtCleanup(t, value)
 
 	got := target{Missing: "unchanged"}
 	if err := e.Unmarshal(value, &got); err != nil {
@@ -138,6 +140,7 @@ func TestEvaluatorUnmarshalRequiredMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(attrs) error = %v", err)
 	}
+	closeValueAtCleanup(t, value)
 
 	var got target
 	err = e.Unmarshal(value, &got)
@@ -169,6 +172,7 @@ func TestEvaluatorUnmarshalTypeErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(attrs) error = %v", err)
 	}
+	closeValueAtCleanup(t, value)
 
 	var got target
 	err = e.Unmarshal(value, &got)
@@ -191,6 +195,7 @@ func TestEvaluatorUnmarshalInvalidTargets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(string) error = %v", err)
 	}
+	closeValueAtCleanup(t, value)
 
 	var got string
 	tests := []struct {
@@ -231,6 +236,7 @@ func TestEvaluatorUnmarshalNumericAndArray(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(attrs) error = %v", err)
 	}
+	closeValueAtCleanup(t, value)
 
 	var got target
 	if err := e.Unmarshal(value, &got); err != nil {
@@ -264,6 +270,7 @@ func TestEvaluatorUnmarshalMap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(attrs) error = %v", err)
 	}
+	closeValueAtCleanup(t, value)
 
 	var got target
 	if err := e.Unmarshal(value, &got); err != nil {
@@ -292,6 +299,7 @@ func TestEvaluatorUnmarshalMapRequiredMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(attrs) error = %v", err)
 	}
+	closeValueAtCleanup(t, value)
 
 	var got target
 	err = e.Unmarshal(value, &got)
@@ -311,6 +319,7 @@ func TestEvaluatorUnmarshalMapNonStringKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(attrs) error = %v", err)
 	}
+	closeValueAtCleanup(t, value)
 
 	var got map[int]string
 	err = e.Unmarshal(value, &got)
@@ -355,6 +364,7 @@ func TestEvaluatorUnmarshalLifecycleAndOriginValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(foreign) error = %v", err)
 	}
+	closeValueAtCleanup(t, foreign)
 	if err := e2.Unmarshal(foreign, &got); err == nil {
 		t.Fatal("Evaluator.Unmarshal(foreign) error = nil, want error")
 	}

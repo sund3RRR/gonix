@@ -83,22 +83,31 @@ func TestClientFlakeWorkflowAndLifecycle(t *testing.T) {
 		}
 	})
 
-	t.Run("client closes tracked flake", func(t *testing.T) {
+	t.Run("caller closes multiple flakes", func(t *testing.T) {
 		client, err := NewClient(ClientConfig{})
 		if err != nil {
 			t.Fatalf("NewClient() error = %v", err)
 		}
-		f, err := client.NewFlake(ref)
+		first, err := client.NewFlake(ref)
 		if err != nil {
 			_ = client.Close()
 			t.Fatalf("Client.NewFlake() error = %v", err)
 		}
+		second, err := client.NewFlake(ref)
+		if err != nil {
+			_ = first.Close()
+			_ = client.Close()
+			t.Fatalf("Client.NewFlake(second) error = %v", err)
+		}
 
+		if err := second.Close(); err != nil {
+			t.Fatalf("second Flake.Close() error = %v", err)
+		}
+		if err := first.Close(); err != nil {
+			t.Fatalf("first Flake.Close() error = %v", err)
+		}
 		if err := client.Close(); err != nil {
 			t.Fatalf("Client.Close() error = %v", err)
-		}
-		if _, err := f.FetchPackage("demo"); !errors.Is(err, ErrClosed) {
-			t.Fatalf("tracked Flake after Client.Close error = %v, want ErrClosed", err)
 		}
 	})
 }

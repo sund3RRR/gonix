@@ -1,7 +1,6 @@
 package eval
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
@@ -14,13 +13,13 @@ import (
 //
 // An Evaluator borrows the Store and Nix context used to create it. The store
 // and context must outlive the evaluator. Evaluator is not goroutine-safe.
-// Values returned by an Evaluator are tied to that evaluator and must not be
-// used with another evaluator.
+// Values returned by an Evaluator are caller-owned, tied to that evaluator,
+// and must not be used with another evaluator. Callers should close every
+// Value before closing the Evaluator.
 type Evaluator struct {
-	ctx    *nixcontext.Context
-	store  *store.Store
-	state  *nix.EvalState
-	values []*Value
+	ctx   *nixcontext.Context
+	store *store.Store
+	state *nix.EvalState
 }
 
 // New creates an evaluator using an initialized Nix context and open store.
@@ -95,7 +94,7 @@ func (e *Evaluator) Borrow() (*nix.EvalState, error) {
 // This is an integration point for sibling gonix packages that receive owned or
 // refcounted values from lower-level Nix APIs. Callers transfer ownership of
 // ptr to the returned Value and must not decref ptr directly after a successful
-// call.
+// call. The returned Value must be closed by the caller.
 func (e *Evaluator) WrapValue(ptr *nix.NixValue) (*Value, error) {
 	if e.state == nil {
 		return nil, status.ErrClosed
@@ -106,36 +105,25 @@ func (e *Evaluator) WrapValue(ptr *nix.NixValue) (*Value, error) {
 		ptr:   ptr,
 		owner: e,
 	}
-	e.values = append(e.values, value)
 
 	return value, nil
 }
 
-// Close releases values created by e and then releases the owned EvalState.
+// Close releases the owned EvalState.
 //
 // Close is safe to call more than once. Once Close returns, methods that need
-// the raw evaluation state report status.ErrClosed.
+// the raw evaluation state and operations on Values created by e report
+// status.ErrClosed. Caller-owned Values may still be closed while their Context
+// remains open.
 func (e *Evaluator) Close() error {
 	if e == nil || e.state == nil {
 		return nil
 	}
 
-	errs := make([]error, 0, len(e.values))
-	for i := len(e.values) - 1; i >= 0; i-- {
-		if err := e.values[i].Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-
 	nix.StateFree(e.state)
 	e.state = nil
-	e.values = nil
 	e.store = nil
 	e.ctx = nil
-
-	if len(errs) != 0 {
-		return fmt.Errorf("eval: failed to close evaluator: %w", errors.Join(errs...))
-	}
 
 	return nil
 }
@@ -160,7 +148,6 @@ func (e *Evaluator) allocValue() (*Value, error) {
 		ptr:   ptr,
 		owner: e,
 	}
-	e.values = append(e.values, value)
 
 	return value, nil
 }

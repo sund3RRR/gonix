@@ -59,6 +59,16 @@ func requireClosedError(t *testing.T, err error) {
 	}
 }
 
+func closeValueAtCleanup(t *testing.T, value *eval.Value) {
+	t.Helper()
+
+	t.Cleanup(func() {
+		if err := value.Close(); err != nil {
+			t.Errorf("Value.Close() error = %v", err)
+		}
+	})
+}
+
 func TestEvaluatorEvalStringAndPrimitiveGetters(t *testing.T) {
 	_, e := newTestEvaluator(t)
 
@@ -145,6 +155,7 @@ func TestEvaluatorEvalStringAndPrimitiveGetters(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Evaluator.EvalString() error = %v", err)
 			}
+			closeValueAtCleanup(t, v)
 			if err := e.Force(v); err != nil {
 				t.Fatalf("Evaluator.Force() error = %v", err)
 			}
@@ -175,6 +186,7 @@ func TestValueGettersRejectWrongType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.EvalString() error = %v", err)
 	}
+	closeValueAtCleanup(t, value)
 	if err := e.Force(value); err != nil {
 		t.Fatalf("Evaluator.Force() error = %v", err)
 	}
@@ -213,6 +225,7 @@ func TestEvaluatorForceDeepCallAndCallMulti(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.EvalString(list) error = %v", err)
 	}
+	closeValueAtCleanup(t, list)
 	if err := e.ForceDeep(list); err != nil {
 		t.Fatalf("Evaluator.ForceDeep() error = %v", err)
 	}
@@ -224,23 +237,28 @@ func TestEvaluatorForceDeepCallAndCallMulti(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.EvalString(fn) error = %v", err)
 	}
+	closeValueAtCleanup(t, fn)
 	two, err := e.NewValue(eval.Int(2))
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(2) error = %v", err)
 	}
+	closeValueAtCleanup(t, two)
 	three, err := e.NewValue(eval.Int(3))
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(3) error = %v", err)
 	}
+	closeValueAtCleanup(t, three)
 
 	partial, err := e.Call(fn, two)
 	if err != nil {
 		t.Fatalf("Evaluator.Call() error = %v", err)
 	}
+	closeValueAtCleanup(t, partial)
 	sum, err := e.Call(partial, three)
 	if err != nil {
 		t.Fatalf("Evaluator.Call(partial) error = %v", err)
 	}
+	closeValueAtCleanup(t, sum)
 	if err := e.Force(sum); err != nil {
 		t.Fatalf("Evaluator.Force(sum) error = %v", err)
 	}
@@ -252,6 +270,7 @@ func TestEvaluatorForceDeepCallAndCallMulti(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.CallMulti() error = %v", err)
 	}
+	closeValueAtCleanup(t, multi)
 	if err := e.Force(multi); err != nil {
 		t.Fatalf("Evaluator.Force(multi) error = %v", err)
 	}
@@ -267,6 +286,7 @@ func TestEvaluatorListAndAttrs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.EvalString(list) error = %v", err)
 	}
+	closeValueAtCleanup(t, list)
 	if err := e.Force(list); err != nil {
 		t.Fatalf("Evaluator.Force(list) error = %v", err)
 	}
@@ -274,6 +294,7 @@ func TestEvaluatorListAndAttrs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.Index() error = %v", err)
 	}
+	closeValueAtCleanup(t, second)
 	if got, err := second.Int(); err != nil || got != 2 {
 		t.Fatalf("Value.Int(second) = %d, %v; want 2, nil", got, err)
 	}
@@ -282,6 +303,7 @@ func TestEvaluatorListAndAttrs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.EvalString(attrs) error = %v", err)
 	}
+	closeValueAtCleanup(t, attrs)
 	if err := e.Force(attrs); err != nil {
 		t.Fatalf("Evaluator.Force(attrs) error = %v", err)
 	}
@@ -307,6 +329,7 @@ func TestEvaluatorListAndAttrs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.Attr(a) error = %v", err)
 	}
+	closeValueAtCleanup(t, attrA)
 	if got, err := attrA.Int(); err != nil || got != 1 {
 		t.Fatalf("Value.Int(attrA) = %d, %v; want 1, nil", got, err)
 	}
@@ -318,9 +341,11 @@ func TestEvaluatorListAndAttrs(t *testing.T) {
 			t.Fatalf("Evaluator.AttrName(%d) error = %v", i, err)
 		}
 		names = append(names, name)
-		if _, err := e.AttrByIndex(attrs, i); err != nil {
+		value, err := e.AttrByIndex(attrs, i)
+		if err != nil {
 			t.Fatalf("Evaluator.AttrByIndex(%d) error = %v", i, err)
 		}
+		closeValueAtCleanup(t, value)
 	}
 	sort.Strings(names)
 	if names[0] != "a" || names[1] != "b" {
@@ -335,6 +360,7 @@ func TestEvaluatorNewValueBuilders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(PathString) error = %v", err)
 	}
+	closeValueAtCleanup(t, path)
 	if got, err := path.PathString(); err != nil || got != "/nix/store" {
 		t.Fatalf("Value.PathString() = %q, %v; want /nix/store, nil", got, err)
 	}
@@ -343,6 +369,7 @@ func TestEvaluatorNewValueBuilders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(List) error = %v", err)
 	}
+	closeValueAtCleanup(t, list)
 	if got, err := list.ListLen(); err != nil || got != 4 {
 		t.Fatalf("Value.ListLen() = %d, %v; want 4, nil", got, err)
 	}
@@ -354,10 +381,12 @@ func TestEvaluatorNewValueBuilders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(Attrs) error = %v", err)
 	}
+	closeValueAtCleanup(t, attrs)
 	answer, err := e.Attr(attrs, "answer")
 	if err != nil {
 		t.Fatalf("Evaluator.Attr(answer) error = %v", err)
 	}
+	closeValueAtCleanup(t, answer)
 	if got, err := answer.Int(); err != nil || got != 42 {
 		t.Fatalf("Value.Int(answer) = %d, %v; want 42, nil", got, err)
 	}
@@ -366,6 +395,7 @@ func TestEvaluatorNewValueBuilders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(Copy) error = %v", err)
 	}
+	closeValueAtCleanup(t, copied)
 	if got, err := copied.Int(); err != nil || got != 42 {
 		t.Fatalf("Value.Int(copied) = %d, %v; want 42, nil", got, err)
 	}
@@ -374,10 +404,12 @@ func TestEvaluatorNewValueBuilders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.EvalString(fn) error = %v", err)
 	}
+	closeValueAtCleanup(t, fn)
 	applied, err := e.NewValue(eval.Apply(fn, copied))
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(Apply) error = %v", err)
 	}
+	closeValueAtCleanup(t, applied)
 	if err := e.Force(applied); err != nil {
 		t.Fatalf("Evaluator.Force(applied) error = %v", err)
 	}
@@ -393,6 +425,7 @@ func TestEvaluatorRealiseString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.EvalString() error = %v", err)
 	}
+	closeValueAtCleanup(t, value)
 	if err := e.Force(value); err != nil {
 		t.Fatalf("Evaluator.Force() error = %v", err)
 	}
@@ -432,6 +465,7 @@ func TestEvaluatorLifecycleAndOriginValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(second) error = %v", err)
 	}
+	closeValueAtCleanup(t, second)
 	if err := e.Close(); err != nil {
 		t.Fatalf("Evaluator.Close() error = %v", err)
 	}
@@ -439,6 +473,8 @@ func TestEvaluatorLifecycleAndOriginValidation(t *testing.T) {
 		t.Fatalf("second Evaluator.Close() error = %v", err)
 	}
 	_, err = second.Int()
+	requireClosedError(t, err)
+	_, err = second.Borrow()
 	requireClosedError(t, err)
 
 	_, err = e.EvalString("1", ".")
@@ -463,6 +499,7 @@ func TestEvaluatorLifecycleAndOriginValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(foreign) error = %v", err)
 	}
+	closeValueAtCleanup(t, foreign)
 	if err := e2.Force(foreign); err == nil {
 		t.Fatal("Evaluator.Force(foreign) error = nil, want error")
 	}
@@ -490,15 +527,17 @@ func TestContextEvaluatorLifecycle(t *testing.T) {
 	if err := e.Close(); err != nil {
 		t.Fatalf("Evaluator.Close() error = %v", err)
 	}
+	_, err = v.Int()
+	requireClosedError(t, err)
+	if err := v.Close(); err != nil {
+		t.Fatalf("Value.Close() after Evaluator.Close() error = %v", err)
+	}
 	if err := s.Close(); err != nil {
 		t.Fatalf("Store.Close() error = %v", err)
 	}
 	if err := ctx.Close(); err != nil {
 		t.Fatalf("Context.Close() error = %v", err)
 	}
-	_, err = v.Int()
-	requireClosedError(t, err)
-
 	_, err = eval.New(ctx, s)
 	requireClosedError(t, err)
 }

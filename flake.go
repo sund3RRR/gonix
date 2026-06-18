@@ -19,7 +19,8 @@ const packageProjectionPath = "projections/package.nix"
 // Flake is a parsed and locked flake with high-level output workflows.
 //
 // Flake owns its parsed reference, lock, and package projection. It borrows the
-// Store, Evaluator, settings, and Context used to create it.
+// Store, Evaluator, settings, and Context used to create it, all of which must
+// remain open until the Flake is closed.
 type Flake struct {
 	parsedRef         *flake.Ref
 	lock              *flake.LockedFlake

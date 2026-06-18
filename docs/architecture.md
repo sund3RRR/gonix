@@ -52,11 +52,11 @@ Client owns:
 
 - one hidden `nixcontext.Context`;
 - fetcher and flake settings;
-- one default Store and Evaluator;
-- every Flake returned by `Client.NewFlake`.
+- one default Store and Evaluator.
 
-Client closes tracked flakes first, then evaluator, store, settings, and
-context. Closing a tracked Flake manually is valid because Close is idempotent.
+Every Flake returned by `Client.NewFlake` is caller-owned and must be closed
+before the Client. Client closes its evaluator, store, settings, and context in
+reverse dependency order.
 
 ### Advanced composition
 
@@ -135,13 +135,13 @@ Dependency direction is one-way:
 | Type | Raw object | Ownership | Close operation |
 | --- | --- | --- | --- |
 | `nixcontext.Context` | `*nix.NixCContext` | owned lifetime root | `CContextFree` |
-| `gonix.Client` | composed resources | owns context, settings, store, evaluator, flakes | reverse dependency order |
+| `gonix.Client` | composed resources | owns context, settings, store, evaluator | reverse dependency order |
 | `gonix.Flake` | reference, locked flake, projection value | owned; borrows Client graph | closes projection, lock, reference |
 | `store.Store` | `*nix.Store` plus cached metadata | owned; borrows Context | `StoreFree` |
 | `storepath.Path` | `*nix.StorePath` | owned or cloned | `StorePathFree` |
 | `store.Derivation` | `*nix.NixDerivation` plus cached JSON | owned or cloned | `DerivationFree` |
-| `eval.Evaluator` | `*nix.EvalState` | owned; borrows Store and Context | values then `StateFree` |
-| `eval.Value` | `*nix.NixValue` | owned/refcounted; tied to Evaluator | `ValueDecref` |
+| `eval.Evaluator` | `*nix.EvalState` | owned; borrows Store and Context | `StateFree` |
+| `eval.Value` | `*nix.NixValue` | caller-owned/refcounted; tied to Evaluator and borrows Context | `ValueDecref` |
 | `fetchers.Settings` | settings handle | owned; borrows Context | `FetchersSettingsFree` |
 | `flakesettings.Settings` | settings handle | owned; borrows Context | `FlakeSettingsFree` |
 | `flake.Ref` | reference handle | owned; borrows Context/settings | `FlakeReferenceFree` |
@@ -168,7 +168,7 @@ flowchart TD
     Client -->|owns| FlakeSettings
     Client -->|owns| Store
     Client -->|owns| Eval
-    Client -->|tracks| Flake
+    Client -->|creates| Flake
 
     Fetchers -->|borrows| Context
     FlakeSettings -->|borrows| Context
@@ -182,7 +182,7 @@ flowchart TD
     Flake -->|borrows| Store
     Flake -->|borrows| Eval
 
-    Eval -->|owns/refcounts| Value
+    Eval -->|creates| Value
     Store -->|creates| Path
     Store -->|creates| Derivation
     Flake -->|projects| Package
@@ -194,6 +194,14 @@ context. Cached metadata accessors on `store.Store` and `storepath.Path`, plus
 cached serialization on `store.Derivation`, remain available after their raw
 handles or Context are closed. Objects are not goroutine-safe unless explicitly
 documented.
+
+Caller-owned resources must be closed before the resources they borrow:
+
+- every `gonix.Flake` returned by `Client.NewFlake` before its Client;
+- every `eval.Value` before its Context, preferably before its Evaluator.
+
+Closing an Evaluator invalidates operations on its Values. Those Values may
+still be closed after the Evaluator while their Context remains open.
 
 ## Error handling
 
@@ -209,7 +217,7 @@ documented.
 
 ## Public workflow boundaries
 
-- `Client.NewFlake` is the ordinary tracked constructor.
+- `Client.NewFlake` is the ordinary caller-owned constructor.
 - `gonix.NewFlake` is the explicitly assembled advanced constructor.
 - `Flake.FetchPackage(name, opts...)` selects and decodes a package for a
   system.

@@ -11,8 +11,7 @@ import (
 // EvalString evaluates a Nix expression string at path.
 //
 // The path is used by Nix for diagnostics and relative path resolution. The
-// returned Value is tied to e and is closed by e.Close if the caller has not
-// already closed it.
+// returned Value is owned by the caller and must be closed.
 func (e *Evaluator) EvalString(expr, path string) (*Value, error) {
 	if e.state == nil {
 		return nil, status.ErrClosed
@@ -36,7 +35,7 @@ func (e *Evaluator) EvalString(expr, path string) (*Value, error) {
 	return value, nil
 }
 
-// NewValue creates a Nix value from a typed GoValue.
+// NewValue creates a caller-owned Nix value from a typed GoValue.
 func (e *Evaluator) NewValue(gv GoValue) (*Value, error) {
 	if e.state == nil {
 		return nil, status.ErrClosed
@@ -99,7 +98,7 @@ func (e *Evaluator) ForceDeep(v *Value) error {
 	return nil
 }
 
-// Call applies fn to arg and returns the result value.
+// Call applies fn to arg and returns a caller-owned result value.
 func (e *Evaluator) Call(fn, arg *Value) (*Value, error) {
 	if e.state == nil {
 		return nil, status.ErrClosed
@@ -131,7 +130,7 @@ func (e *Evaluator) Call(fn, arg *Value) (*Value, error) {
 	return out, nil
 }
 
-// CallMulti applies fn to args and returns the result value.
+// CallMulti applies fn to args and returns a caller-owned result value.
 func (e *Evaluator) CallMulti(fn *Value, args ...*Value) (*Value, error) {
 	if e.state == nil {
 		return nil, status.ErrClosed
@@ -172,7 +171,7 @@ func (e *Evaluator) CallMulti(fn *Value, args ...*Value) (*Value, error) {
 	return out, nil
 }
 
-// Index returns the forced list item at index.
+// Index returns the caller-owned forced list item at index.
 func (e *Evaluator) Index(v *Value, index uint32) (*Value, error) {
 	if e.state == nil {
 		return nil, status.ErrClosed
@@ -200,7 +199,7 @@ func (e *Evaluator) Index(v *Value, index uint32) (*Value, error) {
 	return value, nil
 }
 
-// Attr returns the forced attribute named name.
+// Attr returns the caller-owned forced attribute named name.
 func (e *Evaluator) Attr(v *Value, name string) (*Value, error) {
 	if e.state == nil {
 		return nil, status.ErrClosed
@@ -228,7 +227,7 @@ func (e *Evaluator) Attr(v *Value, name string) (*Value, error) {
 	return value, nil
 }
 
-// AttrByIndex returns the forced attribute value at index.
+// AttrByIndex returns the caller-owned forced attribute value at index.
 func (e *Evaluator) AttrByIndex(v *Value, index uint32) (*Value, error) {
 	if e.state == nil {
 		return nil, status.ErrClosed

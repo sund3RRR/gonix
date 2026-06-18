@@ -3,7 +3,6 @@ package gonix
 import (
 	"errors"
 	"fmt"
-	"io"
 	"sort"
 
 	"github.com/sund3RRR/gonix/eval"
@@ -17,15 +16,15 @@ import (
 // Client owns the resources for high-level flake workflows.
 //
 // Client owns a hidden Nix context, a default store and evaluator, fetcher and
-// flake settings, and every Flake created through NewFlake. Client is not
-// goroutine-safe. Close releases resources in reverse dependency order.
+// flake settings. Flakes created through NewFlake are caller-owned and must be
+// closed before the Client. Client is not goroutine-safe. Close releases owned
+// resources in reverse dependency order.
 type Client struct {
 	ctx             *nixcontext.Context
 	store           *store.Store
 	evaluator       *eval.Evaluator
 	fetcherSettings *fetchers.Settings
 	flakeSettings   *flakesettings.Settings
-	resources       []io.Closer
 }
 
 // NewClient creates a flake-ready Client.
@@ -84,10 +83,9 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 	return c, nil
 }
 
-// NewFlake parses and locks ref and tracks the returned Flake for Client.Close.
+// NewFlake parses and locks ref.
 //
-// The returned Flake may also be closed directly; both Close methods are
-// idempotent.
+// The returned Flake is owned by the caller and must be closed before c.
 func (c *Client) NewFlake(ref string, opts ...FlakeOption) (*Flake, error) {
 	if c.ctx == nil {
 		return nil, status.ErrClosed
@@ -98,11 +96,10 @@ func (c *Client) NewFlake(ref string, opts ...FlakeOption) (*Flake, error) {
 		return nil, fmt.Errorf("client: failed to create flake: %w", err)
 	}
 
-	c.resources = append(c.resources, f)
 	return f, nil
 }
 
-// Close releases tracked flakes, evaluator, store, settings, and context.
+// Close releases the evaluator, store, settings, and context.
 //
 // Close is idempotent. It attempts every cleanup and joins multiple errors.
 func (c *Client) Close() error {
@@ -110,13 +107,7 @@ func (c *Client) Close() error {
 		return nil
 	}
 
-	errs := make([]error, 0, len(c.resources)+4)
-	for i := len(c.resources) - 1; i >= 0; i-- {
-		if err := c.resources[i].Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	c.resources = nil
+	errs := make([]error, 0)
 
 	if err := c.evaluator.Close(); err != nil {
 		errs = append(errs, err)

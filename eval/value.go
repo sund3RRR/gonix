@@ -72,9 +72,9 @@ func (vt ValueType) String() string {
 
 // Value owns a reference to a Nix value.
 //
-// Values are tied to the Evaluator that created them. State-independent
-// getters live on Value; operations that need an EvalState live on Evaluator.
-// Close releases the owned value reference and is idempotent.
+// Values are tied to the Evaluator that created them and must be closed by the
+// caller before the Context. Value operations require the Evaluator to remain
+// open. Close releases the owned value reference and is idempotent.
 type Value struct {
 	ctx   *nixcontext.Context
 	ptr   *nix.NixValue
@@ -83,8 +83,8 @@ type Value struct {
 
 // Type returns the Nix value type.
 func (v *Value) Type() (ValueType, error) {
-	if v.ptr == nil {
-		return 0, status.ErrClosed
+	if err := v.validate(); err != nil {
+		return 0, err
 	}
 
 	rawCtx, err := v.ctx.Borrow()
@@ -102,8 +102,8 @@ func (v *Value) Type() (ValueType, error) {
 
 // TypeName returns Nix's human-readable type name for v.
 func (v *Value) TypeName() (string, error) {
-	if v.ptr == nil {
-		return "", status.ErrClosed
+	if err := v.validate(); err != nil {
+		return "", err
 	}
 
 	rawCtx, err := v.ctx.Borrow()
@@ -121,8 +121,8 @@ func (v *Value) TypeName() (string, error) {
 
 // Bool returns v as a Go bool.
 func (v *Value) Bool() (bool, error) {
-	if v.ptr == nil {
-		return false, status.ErrClosed
+	if err := v.validate(); err != nil {
+		return false, err
 	}
 
 	rawCtx, err := v.ctx.Borrow()
@@ -143,8 +143,8 @@ func (v *Value) Bool() (bool, error) {
 
 // Int returns v as a Go int64.
 func (v *Value) Int() (int64, error) {
-	if v.ptr == nil {
-		return 0, status.ErrClosed
+	if err := v.validate(); err != nil {
+		return 0, err
 	}
 
 	rawCtx, err := v.ctx.Borrow()
@@ -165,8 +165,8 @@ func (v *Value) Int() (int64, error) {
 
 // Float returns v as a Go float64.
 func (v *Value) Float() (float64, error) {
-	if v.ptr == nil {
-		return 0, status.ErrClosed
+	if err := v.validate(); err != nil {
+		return 0, err
 	}
 
 	rawCtx, err := v.ctx.Borrow()
@@ -187,8 +187,8 @@ func (v *Value) Float() (float64, error) {
 
 // String returns v as a Go string.
 func (v *Value) String() (string, error) {
-	if v.ptr == nil {
-		return "", status.ErrClosed
+	if err := v.validate(); err != nil {
+		return "", err
 	}
 
 	rawCtx, err := v.ctx.Borrow()
@@ -209,8 +209,8 @@ func (v *Value) String() (string, error) {
 
 // PathString returns v as a Nix path string.
 func (v *Value) PathString() (string, error) {
-	if v.ptr == nil {
-		return "", status.ErrClosed
+	if err := v.validate(); err != nil {
+		return "", err
 	}
 
 	rawCtx, err := v.ctx.Borrow()
@@ -231,8 +231,8 @@ func (v *Value) PathString() (string, error) {
 
 // ListLen returns the number of items in a Nix list.
 func (v *Value) ListLen() (uint32, error) {
-	if v.ptr == nil {
-		return 0, status.ErrClosed
+	if err := v.validate(); err != nil {
+		return 0, err
 	}
 
 	rawCtx, err := v.ctx.Borrow()
@@ -253,8 +253,8 @@ func (v *Value) ListLen() (uint32, error) {
 
 // AttrLen returns the number of attributes in a Nix attribute set.
 func (v *Value) AttrLen() (uint32, error) {
-	if v.ptr == nil {
-		return 0, status.ErrClosed
+	if err := v.validate(); err != nil {
+		return 0, err
 	}
 
 	rawCtx, err := v.ctx.Borrow()
@@ -279,8 +279,8 @@ func (v *Value) AttrLen() (uint32, error) {
 // immediate raw Nix call that needs it. This is an escape hatch for integration
 // with lower-level bindings.
 func (v *Value) Borrow() (*nix.NixValue, error) {
-	if v.ptr == nil {
-		return nil, status.ErrClosed
+	if err := v.validate(); err != nil {
+		return nil, err
 	}
 
 	return v.ptr, nil
@@ -288,8 +288,9 @@ func (v *Value) Borrow() (*nix.NixValue, error) {
 
 // Close releases the owned Nix value reference.
 //
-// Close is safe to call more than once. Once Close returns, methods that need
-// the raw value handle report status.ErrClosed.
+// Close is safe to call more than once. It may be called after the Evaluator is
+// closed, but the Context must remain open. Once Close returns, methods that
+// need the raw value handle report status.ErrClosed.
 func (v *Value) Close() error {
 	if v == nil || v.ptr == nil {
 		return nil
@@ -306,6 +307,14 @@ func (v *Value) Close() error {
 
 	if code := nix.ValueDecref(rawCtx, v.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 		return fmt.Errorf("eval: failed to decref value: %w", status.FromContext(rawCtx))
+	}
+
+	return nil
+}
+
+func (v *Value) validate() error {
+	if v == nil || v.ptr == nil || v.owner == nil || v.owner.state == nil {
+		return status.ErrClosed
 	}
 
 	return nil

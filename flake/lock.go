@@ -111,7 +111,8 @@ func NewLockedFlake(
 	}, nil
 }
 
-// OutputAttrs returns the locked flake output attributes as an evaluator value.
+// OutputAttrs returns the locked flake output attributes as a caller-owned
+// evaluator value.
 func (l *LockedFlake) OutputAttrs() (*eval.Value, error) {
 	if l.ptr == nil {
 		return nil, status.ErrClosed
