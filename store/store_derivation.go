@@ -28,7 +28,12 @@ func (s *Store) DerivationFromJSON(data []byte) (*Derivation, error) {
 		return nil, fmt.Errorf("store: failed to import derivation from json: %w", status.FromContext(rawCtx))
 	}
 
-	return NewDerivation(s.ctx, ptr), nil
+	derivation, err := NewDerivation(s.ctx, ptr)
+	if err != nil {
+		return nil, fmt.Errorf("store: failed to create derivation: %w", err)
+	}
+
+	return derivation, nil
 }
 
 // DerivationFromPath loads a derivation from a store path.
@@ -55,7 +60,12 @@ func (s *Store) DerivationFromPath(path *storepath.Path) (*Derivation, error) {
 		return nil, fmt.Errorf("store: failed to load derivation from path: %w", status.FromContext(rawCtx))
 	}
 
-	return NewDerivation(s.ctx, ptr), nil
+	derivation, err := NewDerivation(s.ctx, ptr)
+	if err != nil {
+		return nil, fmt.Errorf("store: failed to create derivation: %w", err)
+	}
+
+	return derivation, nil
 }
 
 // AddDerivation adds d to this store and returns its derivation store path.

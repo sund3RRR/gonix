@@ -113,7 +113,7 @@ General context settings live on `nixcontext.Context`, not Client:
 | `gonix` | `Client`, `ClientConfig`, `Flake`, `Package` | Flake-first workflows, package projection, realization DTOs, resource orchestration. |
 | `nixcontext` | `Context`, `Config`, verbosity and log types | Nix context bootstrap, settings, raw context lifecycle. |
 | `storepath` | `Path` | Owned Nix store path handles. |
-| `store` | `Store`, `Derivation`, `Realization`, `Closure` | Store-backed paths, derivations, realization, closures, and copying. |
+| `store` | `Store`, `Derivation`, `DerivationData`, `Realization`, `Closure` | Store-backed paths, derivations, realization, closures, and copying. |
 | `eval` | `Evaluator`, `Value`, builders, realized strings | Evaluation states and values tied to an evaluator. |
 | `fetchers` | `Settings` | Fetcher settings lifecycle. |
 | `flakesettings` | `Settings` | Flake settings lifecycle and evaluator integration. |
@@ -139,7 +139,7 @@ Dependency direction is one-way:
 | `gonix.Flake` | reference, locked flake, projection value | owned; borrows Client graph | closes projection, lock, reference |
 | `store.Store` | `*nix.Store` plus cached metadata | owned; borrows Context | `StoreFree` |
 | `storepath.Path` | `*nix.StorePath` | owned or cloned | `StorePathFree` |
-| `store.Derivation` | `*nix.NixDerivation` | owned or cloned | `DerivationFree` |
+| `store.Derivation` | `*nix.NixDerivation` plus cached JSON | owned or cloned | `DerivationFree` |
 | `eval.Evaluator` | `*nix.EvalState` | owned; borrows Store and Context | values then `StateFree` |
 | `eval.Value` | `*nix.NixValue` | owned/refcounted; tied to Evaluator | `ValueDecref` |
 | `fetchers.Settings` | settings handle | owned; borrows Context | `FetchersSettingsFree` |
@@ -190,9 +190,10 @@ flowchart TD
 
 All Close methods are idempotent. Methods depending on a closed owned handle or
 closed Context return `status.ErrClosed` directly or wrapped with operation
-context. Cached metadata accessors on `store.Store` and `storepath.Path` remain
-available after their raw handles or Context are closed. Objects are not
-goroutine-safe unless explicitly documented.
+context. Cached metadata accessors on `store.Store` and `storepath.Path`, plus
+cached serialization on `store.Derivation`, remain available after their raw
+handles or Context are closed. Objects are not goroutine-safe unless explicitly
+documented.
 
 ## Error handling
 

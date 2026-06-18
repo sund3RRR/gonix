@@ -1,7 +1,7 @@
 package store
 
 import (
-	"encoding/json"
+	"bytes"
 	"errors"
 	"testing"
 
@@ -69,16 +69,17 @@ func TestStore_DerivationFromJSON(t *testing.T) {
 				}
 			})
 
-			raw, err := got.JSON()
+			raw := got.SerializeJSON()
+			if bytes.Equal(raw, tt.data) {
+				t.Fatal("SerializeJSON() returned caller formatting instead of Nix-normalized JSON")
+			}
+
+			data, err := got.Deserialize()
 			if err != nil {
-				t.Fatalf("Derivation.JSON() error = %v", err)
+				t.Fatalf("Derivation.Deserialize() error = %v", err)
 			}
-			var parsed map[string]any
-			if err := json.Unmarshal(raw, &parsed); err != nil {
-				t.Fatalf("json.Unmarshal(Derivation.JSON()) error = %v", err)
-			}
-			if parsed["name"] != "gonix-test" {
-				t.Fatalf("derivation name = %v, want gonix-test", parsed["name"])
+			if data.Name != "gonix-test" {
+				t.Fatalf("derivation name = %v, want gonix-test", data.Name)
 			}
 		})
 	}
