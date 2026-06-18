@@ -1,3 +1,5 @@
+// Package utils provides shared adapters for values returned by
+// nix-go-bindings.
 package utils
 
 import (

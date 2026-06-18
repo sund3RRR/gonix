@@ -119,7 +119,7 @@ General context settings live on `nixcontext.Context`, not Client:
 | `flakesettings` | `Settings` | Flake settings lifecycle and evaluator integration. |
 | `flake` | `Ref`, `LockedFlake` | Low-level flake parsing, locking, and output access. |
 | `internal/status` | `NixError`, `ErrorCode`, `ErrClosed` | Stable conversion of mutable Nix context errors. |
-| `internal/utils` | string adapters | Shared generated-binding adapters. |
+| `pkg/utils` | `TakeCString` | Shared generated-binding string adapters. |
 
 Dependency direction is one-way:
 
