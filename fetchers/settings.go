@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
+	"github.com/sund3RRR/gonix/nixcontext"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -14,7 +15,7 @@ import (
 // the Settings. Close is idempotent, but other methods return an error wrapping
 // gonix.ErrClosed after Close.
 type Settings struct {
-	ctx *nix.NixCContext
+	ctx *nixcontext.Context
 	ptr *nix.NixFetchersSettings
 }
 
@@ -23,10 +24,15 @@ type Settings struct {
 // The returned Settings owns the raw Nix fetcher settings handle and must be
 // closed by the caller. The ctx argument is borrowed and must remain valid for
 // as long as the Settings is used.
-func NewSettings(ctx *nix.NixCContext) (*Settings, error) {
-	ptr := nix.FetchersSettingsNew(ctx)
+func NewSettings(ctx *nixcontext.Context) (*Settings, error) {
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("fetchers: borrow context: %w", err)
+	}
+
+	ptr := nix.FetchersSettingsNew(rawCtx)
 	if ptr == nil {
-		return nil, fmt.Errorf("fetchers: failed to create settings: %w", status.FromContext(ctx))
+		return nil, fmt.Errorf("fetchers: failed to create settings: %w", status.FromContext(rawCtx))
 	}
 
 	return &Settings{
@@ -44,6 +50,9 @@ func (s *Settings) Borrow() (*nix.NixFetchersSettings, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed
 	}
+	if _, err := s.ctx.Borrow(); err != nil {
+		return nil, err
+	}
 
 	return s.ptr, nil
 }
@@ -53,7 +62,7 @@ func (s *Settings) Borrow() (*nix.NixFetchersSettings, error) {
 // Close is safe to call more than once. Once Close returns, methods that need
 // the raw settings handle report status.ErrClosed.
 func (s *Settings) Close() error {
-	if s.ptr == nil {
+	if s == nil || s.ptr == nil {
 		return nil
 	}
 

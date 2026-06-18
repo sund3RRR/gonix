@@ -128,24 +128,26 @@ When a method closes several resources and can collect multiple errors, keep
 closing every resource, join errors, and return one wrapped error:
 
 ```go
-func (r *Runtime) Close() error {
-	if r.ctx == nil {
+func (c *Client) Close() error {
+	if c.ctx == nil {
 		return nil
 	}
 
-	errs := make([]error, 0, len(r.resources))
-	for i := len(r.resources) - 1; i >= 0; i-- {
-		if err := r.resources[i].Close(); err != nil {
+	errs := make([]error, 0, len(c.resources))
+	for i := len(c.resources) - 1; i >= 0; i-- {
+		if err := c.resources[i].Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
 
-	nix.CContextFree(r.ctx)
-	r.ctx = nil
-	r.resources = nil
+	if err := c.ctx.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	c.ctx = nil
+	c.resources = nil
 
 	if len(errs) != 0 {
-		return fmt.Errorf("runtime: failed to close resources: %w", errors.Join(errs...))
+		return fmt.Errorf("client: failed to close resources: %w", errors.Join(errs...))
 	}
 
 	return nil

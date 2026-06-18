@@ -6,6 +6,7 @@ import (
 	"unsafe"
 
 	"github.com/sund3RRR/gonix/internal/status"
+	"github.com/sund3RRR/gonix/nixcontext"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -14,30 +15,33 @@ const (
 	nonZeroStorePath = "/nix/store/11111111111111111111111111111111-source"
 )
 
-func newTestContext(t *testing.T) *nix.NixCContext {
+func newTestContext(t *testing.T) *nixcontext.Context {
 	t.Helper()
 
-	ctx := nix.CContextCreate()
-	if ctx == nil {
-		t.Fatal("CContextCreate returned nil")
+	ctx, err := nixcontext.New(nixcontext.Config{})
+	if err != nil {
+		t.Fatalf("nixcontext.New() error = %v", err)
 	}
 	t.Cleanup(func() {
-		nix.CContextFree(ctx)
+		if err := ctx.Close(); err != nil {
+			t.Fatalf("Context.Close() error = %v", err)
+		}
 	})
 
 	return ctx
 }
 
-func newTestStore(t *testing.T, ctx *nix.NixCContext) *nix.Store {
+func newTestStore(t *testing.T, ctx *nixcontext.Context) *nix.Store {
 	t.Helper()
 
-	if got := nix.LibstoreInitNoLoadConfig(ctx); got != nix.NixOk {
-		t.Fatalf("LibstoreInitNoLoadConfig = %v, want %v", got, nix.NixOk)
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		t.Fatalf("Context.Borrow() error = %v", err)
 	}
 
-	store := nix.StoreOpen(ctx, "dummy://", nix.StoreParams{})
+	store := nix.StoreOpen(rawCtx, "dummy://", nix.StoreParams{})
 	if store == nil {
-		t.Fatalf("StoreOpen(dummy://) returned nil: err=%v", statusMessage(ctx))
+		t.Fatalf("StoreOpen(dummy://) returned nil: err=%v", statusMessage(rawCtx))
 	}
 	t.Cleanup(func() {
 		nix.StoreFree(store)
@@ -46,18 +50,22 @@ func newTestStore(t *testing.T, ctx *nix.NixCContext) *nix.Store {
 	return store
 }
 
-func parseRawPath(t *testing.T, ctx *nix.NixCContext, store *nix.Store, rawPath string) *nix.StorePath {
+func parseRawPath(t *testing.T, ctx *nixcontext.Context, store *nix.Store, rawPath string) *nix.StorePath {
 	t.Helper()
 
-	ptr := nix.StoreParsePath(ctx, store, rawPath)
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		t.Fatalf("Context.Borrow() error = %v", err)
+	}
+	ptr := nix.StoreParsePath(rawCtx, store, rawPath)
 	if ptr == nil {
-		t.Fatalf("StoreParsePath(%q) returned nil: err=%v", rawPath, statusMessage(ctx))
+		t.Fatalf("StoreParsePath(%q) returned nil: err=%v", rawPath, statusMessage(rawCtx))
 	}
 
 	return ptr
 }
 
-func newTestPath(t *testing.T, ctx *nix.NixCContext, store *nix.Store, rawPath string) *Path {
+func newTestPath(t *testing.T, ctx *nixcontext.Context, store *nix.Store, rawPath string) *Path {
 	t.Helper()
 
 	path, err := New(ctx, parseRawPath(t, ctx, store, rawPath))
@@ -109,14 +117,14 @@ func requireClosedError(t *testing.T, err error) {
 func TestFromParts(t *testing.T) {
 	tests := []struct {
 		name          string
-		setup         func(t *testing.T) (*nix.NixCContext, [20]byte, string)
+		setup         func(t *testing.T) (*nixcontext.Context, [20]byte, string)
 		wantName      string
 		wantHash      func(t *testing.T) [20]byte
 		wantClosedErr bool
 	}{
 		{
 			name: "creates path from hash and name",
-			setup: func(t *testing.T) (*nix.NixCContext, [20]byte, string) {
+			setup: func(t *testing.T) (*nixcontext.Context, [20]byte, string) {
 				t.Helper()
 
 				ctx := newTestContext(t)

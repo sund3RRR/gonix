@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/sund3RRR/gonix/internal/status"
+	"github.com/sund3RRR/gonix/nixcontext"
 	"github.com/sund3RRR/gonix/storepath"
-	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
 const (
@@ -40,20 +40,18 @@ const testStoreDerivationJSON = `{
   }
 }`
 
-func newStoreTestContext(t *testing.T) *nix.NixCContext {
+func newStoreTestContext(t *testing.T) *nixcontext.Context {
 	t.Helper()
 
-	ctx := nix.CContextCreate()
-	if ctx == nil {
-		t.Fatal("CContextCreate returned nil")
+	ctx, err := nixcontext.New(nixcontext.Config{})
+	if err != nil {
+		t.Fatalf("nixcontext.New() error = %v", err)
 	}
 	t.Cleanup(func() {
-		nix.CContextFree(ctx)
+		if err := ctx.Close(); err != nil {
+			t.Fatalf("Context.Close() error = %v", err)
+		}
 	})
-
-	if code := nix.LibstoreInitNoLoadConfig(ctx); status.ErrorCode(code) != status.ErrorCodeOK {
-		t.Fatalf("LibstoreInitNoLoadConfig() = %v: %v", code, status.FromContext(ctx))
-	}
 
 	return ctx
 }

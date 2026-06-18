@@ -27,7 +27,7 @@ type RealisedString struct {
 // Close attempts to close every path and returns a joined error if one or more
 // closes fail. It is safe to call more than once.
 func (r *RealisedString) Close() error {
-	if len(r.Paths) == 0 {
+	if r == nil || len(r.Paths) == 0 {
 		return nil
 	}
 
@@ -52,19 +52,24 @@ func (e *Evaluator) RealiseString(v *Value) (*RealisedString, error) {
 		return nil, status.ErrClosed
 	}
 
+	rawCtx, err := e.ctx.Borrow()
+	if err != nil {
+		return nil, err
+	}
+
 	if err := e.validateValue(v); err != nil {
 		return nil, fmt.Errorf("eval: failed to validate value: %w", err)
 	}
 
-	realised := nix.StringRealise(e.ctx, e.state, v.ptr, false)
+	realised := nix.StringRealise(rawCtx, e.state, v.ptr, false)
 	if realised == nil {
-		return nil, fmt.Errorf("eval: failed to realise string: %w", status.FromContext(e.ctx))
+		return nil, fmt.Errorf("eval: failed to realise string: %w", status.FromContext(rawCtx))
 	}
 	defer nix.RealisedStringFree(realised)
 
 	valuePtr := nix.RealisedStringGetBuffer(realised)
 	if valuePtr == nil {
-		return nil, fmt.Errorf("eval: failed to get realised string buffer: %w", status.FromContext(e.ctx))
+		return nil, fmt.Errorf("eval: failed to get realised string buffer: %w", status.FromContext(rawCtx))
 	}
 	size := nix.RealisedStringGetBufferSize(realised)
 	value := string(unsafe.Slice(valuePtr, size))
@@ -80,7 +85,7 @@ func (e *Evaluator) RealiseString(v *Value) (*RealisedString, error) {
 		pathPtr := nix.RealisedStringGetStorePath(realised, i)
 		if pathPtr == nil {
 			_ = out.Close()
-			return nil, fmt.Errorf("eval: failed to clone realised string path %d: %w", i, status.FromContext(e.ctx))
+			return nil, fmt.Errorf("eval: failed to clone realised string path %d: %w", i, status.FromContext(rawCtx))
 		}
 		path, err := storepath.New(e.ctx, pathPtr)
 		if err != nil {

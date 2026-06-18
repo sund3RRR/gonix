@@ -5,6 +5,7 @@ import (
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/internal/utils"
+	"github.com/sund3RRR/gonix/nixcontext"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -19,7 +20,7 @@ import (
 // A Derivation must be closed when the caller is done with it. The Nix context
 // used to create it must remain valid for as long as it is used.
 type Derivation struct {
-	ctx *nix.NixCContext
+	ctx *nixcontext.Context
 	ptr *nix.NixDerivation
 }
 
@@ -28,7 +29,7 @@ type Derivation struct {
 // The returned Derivation takes ownership of ptr and releases it from Close.
 // The ctx argument is borrowed and must remain valid for as long as the
 // derivation is used. Passing a nil ptr creates a closed Derivation.
-func NewDerivation(ctx *nix.NixCContext, ptr *nix.NixDerivation) *Derivation {
+func NewDerivation(ctx *nixcontext.Context, ptr *nix.NixDerivation) *Derivation {
 	return &Derivation{
 		ctx: ctx,
 		ptr: ptr,
@@ -44,9 +45,14 @@ func (d *Derivation) JSON() ([]byte, error) {
 		return nil, status.ErrClosed
 	}
 
-	rawJSON := nix.DerivationToJson(d.ctx, d.ptr)
+	rawCtx, err := d.ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("derivation: borrow context: %w", err)
+	}
+
+	rawJSON := nix.DerivationToJson(rawCtx, d.ptr)
 	if rawJSON == nil {
-		return nil, fmt.Errorf("derivation: failed to export to json: %w", status.FromContext(d.ctx))
+		return nil, fmt.Errorf("derivation: failed to export to json: %w", status.FromContext(rawCtx))
 	}
 
 	return []byte(utils.TakeCString(rawJSON)), nil
@@ -60,9 +66,14 @@ func (d *Derivation) Clone() (*Derivation, error) {
 		return nil, status.ErrClosed
 	}
 
+	rawCtx, err := d.ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("derivation: borrow context: %w", err)
+	}
+
 	clone := nix.DerivationClone(d.ptr)
 	if clone == nil {
-		return nil, fmt.Errorf("derivation: failed to clone derivation: %w", status.FromContext(d.ctx))
+		return nil, fmt.Errorf("derivation: failed to clone derivation: %w", status.FromContext(rawCtx))
 	}
 
 	return NewDerivation(d.ctx, clone), nil
@@ -77,6 +88,9 @@ func (d *Derivation) Borrow() (*nix.NixDerivation, error) {
 	if d.ptr == nil {
 		return nil, status.ErrClosed
 	}
+	if _, err := d.ctx.Borrow(); err != nil {
+		return nil, err
+	}
 
 	return d.ptr, nil
 }
@@ -86,7 +100,7 @@ func (d *Derivation) Borrow() (*nix.NixDerivation, error) {
 // Close is safe to call more than once. Once Close returns, methods that need
 // the raw derivation handle report status.ErrClosed.
 func (d *Derivation) Close() error {
-	if d.ptr == nil {
+	if d == nil || d.ptr == nil {
 		return nil
 	}
 

@@ -46,6 +46,11 @@ func (s *Store) CopyClosure(dst *Store, path *storepath.Path) error {
 		return status.ErrClosed
 	}
 
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return err
+	}
+
 	dstPtr, err := dst.Borrow()
 	if err != nil {
 		return fmt.Errorf("store: failed to borrow dst store: %w", err)
@@ -56,8 +61,8 @@ func (s *Store) CopyClosure(dst *Store, path *storepath.Path) error {
 		return fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	if code := nix.StoreCopyClosure(s.ctx, s.ptr, dstPtr, pathPtr); status.ErrorCode(code) != status.ErrorCodeOK {
-		return fmt.Errorf("store: failed to copy closure: %w", status.FromContext(s.ctx))
+	if code := nix.StoreCopyClosure(rawCtx, s.ptr, dstPtr, pathPtr); status.ErrorCode(code) != status.ErrorCodeOK {
+		return fmt.Errorf("store: failed to copy closure: %w", status.FromContext(rawCtx))
 	}
 
 	return nil
@@ -71,6 +76,11 @@ func (s *Store) CopyClosure(dst *Store, path *storepath.Path) error {
 func (s *Store) CopyPathTo(dst *Store, path *storepath.Path, opts ...CopyOption) error {
 	if s.ptr == nil {
 		return status.ErrClosed
+	}
+
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return err
 	}
 
 	dstPtr, err := dst.Borrow()
@@ -88,8 +98,8 @@ func (s *Store) CopyPathTo(dst *Store, path *storepath.Path, opts ...CopyOption)
 		return fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	if code := nix.StoreCopyPath(s.ctx, s.ptr, dstPtr, pathPtr, cfg.Repair, cfg.CheckSignatures); status.ErrorCode(code) != status.ErrorCodeOK {
-		return fmt.Errorf("store: copy path: %w", status.FromContext(s.ctx))
+	if code := nix.StoreCopyPath(rawCtx, s.ptr, dstPtr, pathPtr, cfg.Repair, cfg.CheckSignatures); status.ErrorCode(code) != status.ErrorCodeOK {
+		return fmt.Errorf("store: copy path: %w", status.FromContext(rawCtx))
 	}
 
 	return nil

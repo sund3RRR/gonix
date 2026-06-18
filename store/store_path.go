@@ -18,9 +18,14 @@ func (s *Store) URI() (string, error) {
 		return "", status.ErrClosed
 	}
 
-	ptr := nix.StoreGetUri(s.ctx, s.ptr)
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return "", err
+	}
+
+	ptr := nix.StoreGetUri(rawCtx, s.ptr)
 	if ptr == nil {
-		return "", fmt.Errorf("store: failed to get uri: %w", status.FromContext(s.ctx))
+		return "", fmt.Errorf("store: failed to get uri: %w", status.FromContext(rawCtx))
 	}
 
 	return utils.TakeCString(ptr), nil
@@ -34,9 +39,14 @@ func (s *Store) StoreDir() (string, error) {
 		return "", status.ErrClosed
 	}
 
-	ptr := nix.StoreGetStoredir(s.ctx, s.ptr)
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return "", err
+	}
+
+	ptr := nix.StoreGetStoredir(rawCtx, s.ptr)
 	if ptr == nil {
-		return "", fmt.Errorf("store: failed to get store dir: %w", status.FromContext(s.ctx))
+		return "", fmt.Errorf("store: failed to get store dir: %w", status.FromContext(rawCtx))
 	}
 
 	return utils.TakeCString(ptr), nil
@@ -52,9 +62,14 @@ func (s *Store) ParsePath(pathStr string) (*storepath.Path, error) {
 		return nil, status.ErrClosed
 	}
 
-	ptr := nix.StoreParsePath(s.ctx, s.ptr, pathStr)
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return nil, err
+	}
+
+	ptr := nix.StoreParsePath(rawCtx, s.ptr, pathStr)
 	if ptr == nil {
-		return nil, fmt.Errorf("store: failed to parse path: %w", status.FromContext(s.ctx))
+		return nil, fmt.Errorf("store: failed to parse path: %w", status.FromContext(rawCtx))
 	}
 
 	path, err := storepath.New(s.ctx, ptr)
@@ -75,14 +90,19 @@ func (s *Store) PrintPath(path *storepath.Path) (string, error) {
 		return "", status.ErrClosed
 	}
 
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return "", err
+	}
+
 	pathPtr, err := path.Borrow()
 	if err != nil {
 		return "", fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	ptr := nix.StorePrintPath(s.ctx, s.ptr, pathPtr)
+	ptr := nix.StorePrintPath(rawCtx, s.ptr, pathPtr)
 	if ptr == nil {
-		return "", fmt.Errorf("store: failed to print path: %w", status.FromContext(s.ctx))
+		return "", fmt.Errorf("store: failed to print path: %w", status.FromContext(rawCtx))
 	}
 
 	return utils.TakeCString(ptr), nil
@@ -98,9 +118,14 @@ func (s *Store) PathFromHash(hashPart []byte) (*storepath.Path, error) {
 		return nil, status.ErrClosed
 	}
 
-	ptr := nix.StoreQueryPathFromHashPart(s.ctx, s.ptr, string(hashPart))
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return nil, err
+	}
+
+	ptr := nix.StoreQueryPathFromHashPart(rawCtx, s.ptr, string(hashPart))
 	if ptr == nil {
-		return nil, fmt.Errorf("store: failed to get path from hash: %w", status.FromContext(s.ctx))
+		return nil, fmt.Errorf("store: failed to get path from hash: %w", status.FromContext(rawCtx))
 	}
 
 	path, err := storepath.New(s.ctx, ptr)
@@ -122,14 +147,19 @@ func (s *Store) RealPath(path *storepath.Path) (string, error) {
 		return "", status.ErrClosed
 	}
 
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return "", err
+	}
+
 	pathPtr, err := path.Borrow()
 	if err != nil {
 		return "", fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	ptr := nix.StoreRealPath(s.ctx, s.ptr, pathPtr)
+	ptr := nix.StoreRealPath(rawCtx, s.ptr, pathPtr)
 	if ptr == nil {
-		return "", fmt.Errorf("store: failed to get real path: %w", status.FromContext(s.ctx))
+		return "", fmt.Errorf("store: failed to get real path: %w", status.FromContext(rawCtx))
 	}
 
 	return utils.TakeCString(ptr), nil
@@ -145,13 +175,18 @@ func (s *Store) IsValidPath(path *storepath.Path) (bool, error) {
 		return false, status.ErrClosed
 	}
 
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return false, err
+	}
+
 	pathPtr, err := path.Borrow()
 	if err != nil {
 		return false, fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	valid := nix.StoreIsValidPath(s.ctx, s.ptr, pathPtr)
-	if err := status.FromContext(s.ctx); err != nil {
+	valid := nix.StoreIsValidPath(rawCtx, s.ptr, pathPtr)
+	if err := status.FromContext(rawCtx); err != nil {
 		return false, fmt.Errorf("store: failed to check path validity: %w", err)
 	}
 

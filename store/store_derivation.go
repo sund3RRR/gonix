@@ -18,9 +18,14 @@ func (s *Store) DerivationFromJSON(data []byte) (*Derivation, error) {
 		return nil, status.ErrClosed
 	}
 
-	ptr := nix.DerivationFromJson(s.ctx, s.ptr, string(data))
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return nil, err
+	}
+
+	ptr := nix.DerivationFromJson(rawCtx, s.ptr, string(data))
 	if ptr == nil {
-		return nil, fmt.Errorf("store: failed to import derivation from json: %w", status.FromContext(s.ctx))
+		return nil, fmt.Errorf("store: failed to import derivation from json: %w", status.FromContext(rawCtx))
 	}
 
 	return NewDerivation(s.ctx, ptr), nil
@@ -35,14 +40,19 @@ func (s *Store) DerivationFromPath(path *storepath.Path) (*Derivation, error) {
 		return nil, status.ErrClosed
 	}
 
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return nil, err
+	}
+
 	pathPtr, err := path.Borrow()
 	if err != nil {
 		return nil, fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	ptr := nix.StoreDrvFromStorePath(s.ctx, s.ptr, pathPtr)
+	ptr := nix.StoreDrvFromStorePath(rawCtx, s.ptr, pathPtr)
 	if ptr == nil {
-		return nil, fmt.Errorf("store: failed to load derivation from path: %w", status.FromContext(s.ctx))
+		return nil, fmt.Errorf("store: failed to load derivation from path: %w", status.FromContext(rawCtx))
 	}
 
 	return NewDerivation(s.ctx, ptr), nil
@@ -57,14 +67,19 @@ func (s *Store) AddDerivation(d *Derivation) (*storepath.Path, error) {
 		return nil, status.ErrClosed
 	}
 
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return nil, err
+	}
+
 	drvPtr, err := d.Borrow()
 	if err != nil {
 		return nil, fmt.Errorf("store: failed to borrow derivation: %w", err)
 	}
 
-	ptr := nix.AddDerivation(s.ctx, s.ptr, drvPtr)
+	ptr := nix.AddDerivation(rawCtx, s.ptr, drvPtr)
 	if ptr == nil {
-		return nil, fmt.Errorf("store: failed to add derivation: %w", status.FromContext(s.ctx))
+		return nil, fmt.Errorf("store: failed to add derivation: %w", status.FromContext(rawCtx))
 	}
 
 	path, err := storepath.New(s.ctx, ptr)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
+	"github.com/sund3RRR/gonix/nixcontext"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -13,6 +14,7 @@ import (
 // the Settings. Close is idempotent, but other methods return an error wrapping
 // gonix.ErrClosed after Close.
 type Settings struct {
+	ctx *nixcontext.Context
 	ptr *nix.NixFlakeSettings
 }
 
@@ -21,13 +23,21 @@ type Settings struct {
 // The returned Settings owns the raw Nix flake settings handle and must be
 // closed by the caller. The ctx argument is borrowed and must remain valid for
 // as long as the Settings is used.
-func New(ctx *nix.NixCContext) (*Settings, error) {
-	ptr := nix.FlakeSettingsNew(ctx)
-	if ptr == nil {
-		return nil, fmt.Errorf("flake: failed to create settings: %w", status.FromContext(ctx))
+func New(ctx *nixcontext.Context) (*Settings, error) {
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("flake: borrow context: %w", err)
 	}
 
-	return &Settings{ptr: ptr}, nil
+	ptr := nix.FlakeSettingsNew(rawCtx)
+	if ptr == nil {
+		return nil, fmt.Errorf("flake: failed to create settings: %w", status.FromContext(rawCtx))
+	}
+
+	return &Settings{
+		ctx: ctx,
+		ptr: ptr,
+	}, nil
 }
 
 // Borrow returns the borrowed raw Nix flake settings handle.
@@ -39,6 +49,9 @@ func (s *Settings) Borrow() (*nix.NixFlakeSettings, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed
 	}
+	if _, err := s.ctx.Borrow(); err != nil {
+		return nil, err
+	}
 
 	return s.ptr, nil
 }
@@ -48,7 +61,7 @@ func (s *Settings) Borrow() (*nix.NixFlakeSettings, error) {
 // Close is safe to call more than once. Once Close returns, methods that need
 // the raw settings handle report status.ErrClosed.
 func (s *Settings) Close() error {
-	if s.ptr == nil {
+	if s == nil || s.ptr == nil {
 		return nil
 	}
 

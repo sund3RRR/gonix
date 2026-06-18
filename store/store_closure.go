@@ -6,6 +6,7 @@ import (
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/internal/utils"
+	"github.com/sund3RRR/gonix/nixcontext"
 	"github.com/sund3RRR/gonix/storepath"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
@@ -25,7 +26,7 @@ type Closure struct {
 // Close attempts to close every path and returns a joined error if one or more
 // closes fail. It is safe to call more than once.
 func (c *Closure) Close() error {
-	if len(c.Paths) == 0 {
+	if c == nil || len(c.Paths) == 0 {
 		return nil
 	}
 
@@ -103,7 +104,7 @@ type Realization struct {
 //
 // Close is safe to call more than once.
 func (r *Realization) Close() error {
-	if r.Path == nil {
+	if r == nil || r.Path == nil {
 		return nil
 	}
 
@@ -126,14 +127,19 @@ func (s *Store) Realise(path *storepath.Path) ([]Realization, error) {
 		return nil, status.ErrClosed
 	}
 
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return nil, err
+	}
+
 	pathPtr, err := path.Borrow()
 	if err != nil {
 		return nil, fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	results := nix.StoreRealiseToArray(s.ctx, s.ptr, pathPtr)
+	results := nix.StoreRealiseToArray(rawCtx, s.ptr, pathPtr)
 	if results == nil {
-		return nil, fmt.Errorf("store: failed to realise to array: %w", status.FromContext(s.ctx))
+		return nil, fmt.Errorf("store: failed to realise to array: %w", status.FromContext(rawCtx))
 	}
 	defer nix.StoreRealiseResultsFree(results)
 
@@ -155,6 +161,11 @@ func (s *Store) Closure(path *storepath.Path, opts ...ClosureOption) (*Closure, 
 		return nil, status.ErrClosed
 	}
 
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return nil, err
+	}
+
 	var cfg ClosureConfig
 	for _, opt := range opts {
 		opt(&cfg)
@@ -165,9 +176,9 @@ func (s *Store) Closure(path *storepath.Path, opts ...ClosureOption) (*Closure, 
 		return nil, fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	paths := nix.StoreGetFsClosureArray(s.ctx, s.ptr, pathPtr, cfg.Reverse, cfg.IncludeOutputs, cfg.IncludeDerivers)
+	paths := nix.StoreGetFsClosureArray(rawCtx, s.ptr, pathPtr, cfg.Reverse, cfg.IncludeOutputs, cfg.IncludeDerivers)
 	if paths == nil {
-		return nil, fmt.Errorf("store: failed to get fs closure array: %w", status.FromContext(s.ctx))
+		return nil, fmt.Errorf("store: failed to get fs closure array: %w", status.FromContext(rawCtx))
 	}
 	defer nix.StorePathArrayFree(paths)
 
@@ -179,7 +190,12 @@ func (s *Store) Closure(path *storepath.Path, opts ...ClosureOption) (*Closure, 
 	return closure, nil
 }
 
-func convertClosurePaths(ctx *nix.NixCContext, paths *nix.StorePathArray) (*Closure, error) {
+func convertClosurePaths(ctx *nixcontext.Context, paths *nix.StorePathArray) (*Closure, error) {
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("store: borrow context: %w", err)
+	}
+
 	count := nix.StorePathArrayCount(paths)
 	closure := &Closure{
 		Paths: make([]*storepath.Path, 0, count),
@@ -191,7 +207,7 @@ func convertClosurePaths(ctx *nix.NixCContext, paths *nix.StorePathArray) (*Clos
 			for _, p := range closure.Paths {
 				_ = p.Close()
 			}
-			return nil, fmt.Errorf("store: failed to clone closure path from array %d: %w", i, status.FromContext(ctx))
+			return nil, fmt.Errorf("store: failed to clone closure path from array %d: %w", i, status.FromContext(rawCtx))
 		}
 
 		path, err := storepath.New(ctx, pathPtr)
@@ -207,7 +223,12 @@ func convertClosurePaths(ctx *nix.NixCContext, paths *nix.StorePathArray) (*Clos
 	return closure, nil
 }
 
-func convertRealiseResults(ctx *nix.NixCContext, results *nix.StoreRealiseResults) ([]Realization, error) {
+func convertRealiseResults(ctx *nixcontext.Context, results *nix.StoreRealiseResults) ([]Realization, error) {
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("store: borrow context: %w", err)
+	}
+
 	count := nix.StoreRealiseResultsCount(results)
 	realizations := make([]Realization, 0, count)
 
@@ -217,7 +238,7 @@ func convertRealiseResults(ctx *nix.NixCContext, results *nix.StoreRealiseResult
 			for _, r := range realizations {
 				_ = r.Close()
 			}
-			return nil, fmt.Errorf("store: failed to realize result %d output name: %w", i, status.FromContext(ctx))
+			return nil, fmt.Errorf("store: failed to realize result %d output name: %w", i, status.FromContext(rawCtx))
 		}
 		outputName := utils.TakeCString(outputNamePtr)
 
@@ -226,7 +247,7 @@ func convertRealiseResults(ctx *nix.NixCContext, results *nix.StoreRealiseResult
 			for _, r := range realizations {
 				_ = r.Close()
 			}
-			return nil, fmt.Errorf("store: failed to realize result %d path: %w", i, status.FromContext(ctx))
+			return nil, fmt.Errorf("store: failed to realize result %d path: %w", i, status.FromContext(rawCtx))
 		}
 
 		path, err := storepath.New(ctx, pathPtr)

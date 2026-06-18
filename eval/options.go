@@ -28,10 +28,7 @@ func WithLookupPath(entries ...string) Option {
 	}
 }
 
-// WithEvalStateBuilderConfigurer adds an advanced raw builder configuration hook.
-//
-// The hook runs after basic evaluator options are applied and before the raw
-// eval state is built.
+// WithFlakeSettings adds flake evaluator integration to the state builder.
 func WithFlakeSettings(settings *flakesettings.Settings) Option {
 	return func(c *config) {
 		c.flakesettings = settings

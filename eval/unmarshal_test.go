@@ -7,6 +7,7 @@ import (
 
 	"github.com/sund3RRR/gonix"
 	"github.com/sund3RRR/gonix/eval"
+	"github.com/sund3RRR/gonix/store"
 )
 
 type unmarshalPackage struct {
@@ -320,7 +321,7 @@ func TestEvaluatorUnmarshalMapNonStringKey(t *testing.T) {
 }
 
 func TestEvaluatorUnmarshalLifecycleAndOriginValidation(t *testing.T) {
-	r, e := newTestEvaluator(t)
+	ctx, e := newTestEvaluator(t)
 
 	value, err := e.NewValue(eval.String("demo"))
 	if err != nil {
@@ -335,18 +336,21 @@ func TestEvaluatorUnmarshalLifecycleAndOriginValidation(t *testing.T) {
 		t.Fatal("Evaluator.Unmarshal(closed value) error = nil, want error")
 	}
 
-	s, err := r.OpenStore("dummy://")
+	s, err := store.New(ctx, "dummy://")
 	if err != nil {
-		t.Fatalf("Runtime.OpenStore(second) error = %v", err)
+		t.Fatalf("store.New(second) error = %v", err)
 	}
-	e1, err := r.NewEvaluator(s)
+	t.Cleanup(func() { _ = s.Close() })
+	e1, err := eval.New(ctx, s)
 	if err != nil {
-		t.Fatalf("Runtime.NewEvaluator(e1) error = %v", err)
+		t.Fatalf("eval.New(e1) error = %v", err)
 	}
-	e2, err := r.NewEvaluator(s)
+	t.Cleanup(func() { _ = e1.Close() })
+	e2, err := eval.New(ctx, s)
 	if err != nil {
-		t.Fatalf("Runtime.NewEvaluator(e2) error = %v", err)
+		t.Fatalf("eval.New(e2) error = %v", err)
 	}
+	t.Cleanup(func() { _ = e2.Close() })
 	foreign, err := e1.NewValue(eval.String("foreign"))
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(foreign) error = %v", err)

@@ -5,23 +5,21 @@ import (
 	"testing"
 
 	"github.com/sund3RRR/gonix/internal/status"
-	nix "github.com/sund3RRR/nix-go-bindings"
+	"github.com/sund3RRR/gonix/nixcontext"
 )
 
-func newTestContext(t *testing.T) *nix.NixCContext {
+func newTestContext(t *testing.T) *nixcontext.Context {
 	t.Helper()
 
-	ctx := nix.CContextCreate()
-	if ctx == nil {
-		t.Fatal("CContextCreate returned nil")
+	ctx, err := nixcontext.New(nixcontext.Config{})
+	if err != nil {
+		t.Fatalf("nixcontext.New() error = %v", err)
 	}
 	t.Cleanup(func() {
-		nix.CContextFree(ctx)
+		if err := ctx.Close(); err != nil {
+			t.Fatalf("Context.Close() error = %v", err)
+		}
 	})
-
-	if code := nix.LibutilInit(ctx); status.ErrorCode(code) != status.ErrorCodeOK {
-		t.Fatalf("LibutilInit = %v, want %v: %v", code, nix.NixOk, status.FromContext(ctx))
-	}
 
 	return ctx
 }

@@ -164,6 +164,7 @@ func DefaultSystem() string {
 	return MakeSystem(makeOS(runtime.GOOS), makeArch(runtime.GOARCH))
 }
 
+// MakeSystem constructs a Nix system identifier from OS and architecture.
 func MakeSystem(os OS, arch Arch) string {
 	return fmt.Sprintf("%s-%s", arch, os)
 }

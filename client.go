@@ -4,279 +4,174 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 
 	"github.com/sund3RRR/gonix/eval"
 	"github.com/sund3RRR/gonix/fetchers"
-	"github.com/sund3RRR/gonix/flake"
 	"github.com/sund3RRR/gonix/flakesettings"
 	"github.com/sund3RRR/gonix/internal/status"
-	"github.com/sund3RRR/gonix/scripts"
+	"github.com/sund3RRR/gonix/nixcontext"
 	"github.com/sund3RRR/gonix/store"
-	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
-const packageProjectionPath = "projections/package.nix"
-
-// Client owns high-level gonix workflow resources.
+// Client owns the resources for high-level flake workflows.
 //
-// A Client borrows the Runtime used to create it. Close releases resources
-// created through the client, but it does not close the borrowed Runtime.
+// Client owns a hidden Nix context, a default store and evaluator, fetcher and
+// flake settings, and every Flake created through NewFlake. Client is not
+// goroutine-safe. Close releases resources in reverse dependency order.
 type Client struct {
-	closed            bool
-	ctx               *nix.NixCContext
-	store             *store.Store
-	evaluator         *eval.Evaluator
-	packageProjection *eval.Value
-	flakeSettings     *flakesettings.Settings
-	fetcherSettings   *fetchers.Settings
-	resources         []io.Closer
+	ctx             *nixcontext.Context
+	store           *store.Store
+	evaluator       *eval.Evaluator
+	fetcherSettings *fetchers.Settings
+	flakeSettings   *flakesettings.Settings
+	resources       []io.Closer
 }
 
-// NewClient creates a high-level client using r.
-func NewClient(r *Runtime, opts ...ClientOption) (*Client, error) {
-	var cfg clientConfig
-	for _, opt := range opts {
-		opt(&cfg)
+// NewClient creates a flake-ready Client.
+//
+// ClientConfig{} is a valid quick-start configuration. The returned Client owns
+// all resources it creates and must be closed.
+func NewClient(cfg ClientConfig) (*Client, error) {
+	ctx, err := nixcontext.New(nixcontext.Config{LoadConfig: cfg.LoadConfig})
+	if err != nil {
+		return nil, fmt.Errorf("client: create context: %w", err)
 	}
 
-	c := Client{
-		ctx: r.ctx,
-	}
-
-	var err error
+	c := &Client{ctx: ctx}
 	defer func() {
 		if err != nil {
 			_ = c.Close()
 		}
 	}()
 
-	if cfg.store != nil {
-		c.store = cfg.store
-	} else {
-		c.store, err = r.OpenStore(store.Auto, store.WithReadOnly(true))
-		if err != nil {
-			return nil, fmt.Errorf("client: open store: %w", err)
-		}
-		c.resources = append(c.resources, c.store)
+	if err = applyClientSettings(ctx, cfg.Serialize()); err != nil {
+		return nil, err
+	}
+	if err = ctx.SetVerbosity(cfg.Verbosity); err != nil {
+		return nil, fmt.Errorf("client: set verbosity: %w", err)
+	}
+	if err = ctx.SetLogFormat(cfg.LogFormat); err != nil {
+		return nil, fmt.Errorf("client: set log format: %w", err)
 	}
 
-	c.flakeSettings, err = r.GetFlakeSettings()
+	c.fetcherSettings, err = fetchers.NewSettings(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("client: get flake settings: %w", err)
+		return nil, fmt.Errorf("client: create fetcher settings: %w", err)
 	}
 
-	c.fetcherSettings, err = r.GetFlakeFetcherSettings()
+	c.flakeSettings, err = flakesettings.New(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("client: get fetcher settings: %w", err)
+		return nil, fmt.Errorf("client: create flake settings: %w", err)
 	}
 
-	c.evaluator, err = r.NewEvaluator(c.store, eval.WithFlakeSettings(c.flakeSettings))
-	if err != nil {
-		return nil, fmt.Errorf("client: new evaluator: %w", err)
+	storeURI := cfg.Store.URI
+	if storeURI == "" {
+		storeURI = store.Auto
 	}
-	c.resources = append(c.resources, c.evaluator)
+	c.store, err = store.New(ctx, storeURI, cfg.Store.Opts...)
+	if err != nil {
+		return nil, fmt.Errorf("client: open store: %w", err)
+	}
 
-	var projection []byte
-	projection, err = scripts.Projections.ReadFile(packageProjectionPath)
+	evalOpts := append([]eval.Option(nil), cfg.Eval.Opts...)
+	evalOpts = append(evalOpts, eval.WithFlakeSettings(c.flakeSettings))
+	c.evaluator, err = eval.New(ctx, c.store, evalOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("client: read package projection: %w", err)
+		return nil, fmt.Errorf("client: create evaluator: %w", err)
 	}
-	c.packageProjection, err = c.evaluator.EvalString(string(projection), packageProjectionPath)
-	if err != nil {
-		return nil, fmt.Errorf("client: evaluate package projection: %w", err)
-	}
-	c.resources = append(c.resources, c.packageProjection)
 
-	return &c, nil
+	return c, nil
 }
 
-// ParseFlakeRef parses a flake reference and tracks it for Client.Close.
-func (c *Client) ParseFlakeRef(ref string, opts ...flake.ParseOption) (*flake.Ref, error) {
-	if c.closed {
-		return nil, status.ErrClosed
-	}
-
-	parsed, err := flake.NewParsedRef(c.ctx, c.fetcherSettings, c.flakeSettings, ref, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("client: parse flake ref: %w", err)
-	}
-	c.resources = append(c.resources, parsed)
-
-	return parsed, nil
-}
-
-// LockFlake locks a flake reference and tracks it for Client.Close.
-func (c *Client) LockFlake(ref *flake.Ref, opts ...flake.LockOption) (*flake.LockedFlake, error) {
-	if c.closed {
-		return nil, status.ErrClosed
-	}
-
-	locked, err := flake.NewLockedFlake(c.ctx, c.fetcherSettings, c.flakeSettings, c.evaluator, ref, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("client: lock flake: %w", err)
-	}
-	c.resources = append(c.resources, locked)
-
-	return locked, nil
-}
-
-// FetchPackage fetches a package by name from locked and decodes it.
-func (c *Client) FetchPackage(locked *flake.LockedFlake, name string, opts ...FetchPackageOption) (Package, error) {
-	if c.closed {
-		return Package{}, status.ErrClosed
-	}
-
-	var cfg fetchPackageConfig
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-
-	outputs, err := locked.OutputAttrs()
-	if err != nil {
-		return Package{}, fmt.Errorf("client: fetch package: output attrs: %w", err)
-	}
-	defer func() {
-		_ = outputs.Close()
-	}()
-
-	args := map[string]eval.GoValue{
-		"outputs": eval.Copy(outputs),
-		"name":    eval.String(name),
-	}
-	if cfg.system != "" {
-		args["system"] = eval.String(cfg.system)
-	}
-
-	arg, err := c.evaluator.NewValue(eval.Attrs(args))
-	if err != nil {
-		return Package{}, fmt.Errorf("client: fetch package: build projection argument: %w", err)
-	}
-	defer func() {
-		_ = arg.Close()
-	}()
-
-	value, err := c.evaluator.Call(c.packageProjection, arg)
-	if err != nil {
-		return Package{}, fmt.Errorf("client: fetch package: call projection: %w", err)
-	}
-	defer func() {
-		_ = value.Close()
-	}()
-
-	var pkg Package
-	if err := c.evaluator.Unmarshal(value, &pkg); err != nil {
-		return Package{}, fmt.Errorf("client: fetch package: unmarshal package: %w", err)
-	}
-
-	return pkg, nil
-}
-
-// DownloadPackage fetches a package by name and realizes all of its outputs.
+// NewFlake parses and locks ref and tracks the returned Flake for Client.Close.
 //
-// DownloadPackage returns pure Go DTOs and closes the Nix store path handles
-// produced while realizing the package before returning. The client store must
-// support realization; callers that need writes should pass a writable store to
-// NewClient with WithClientStore.
-func (c *Client) DownloadPackage(locked *flake.LockedFlake, name string, opts ...DownloadPackageOption) ([]DownloadedPackageOutput, error) {
-	if c.closed {
+// The returned Flake may also be closed directly; both Close methods are
+// idempotent.
+func (c *Client) NewFlake(ref string, opts ...FlakeOption) (*Flake, error) {
+	if c.ctx == nil {
 		return nil, status.ErrClosed
 	}
-
-	var cfg downloadPackageConfig
-	for _, opt := range opts {
-		opt(&cfg)
+	if _, err := c.ctx.Borrow(); err != nil {
+		return nil, err
 	}
 
-	fetchOpts := make([]FetchPackageOption, 0, 1)
-	if cfg.system != "" {
-		fetchOpts = append(fetchOpts, WithFetchPackageSystem(cfg.system))
-	}
-
-	pkg, err := c.FetchPackage(locked, name, fetchOpts...)
+	f, err := NewFlake(c.ctx, c.fetcherSettings, c.flakeSettings, c.store, c.evaluator, ref, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("client: download package: fetch package: %w", err)
-	}
-	if pkg.Type != "" && pkg.Type != PackageTypeDerivation {
-		return nil, fmt.Errorf("client: download package: unsupported package type %q", pkg.Type)
-	}
-	if pkg.DrvPath == "" {
-		return nil, fmt.Errorf("client: download package: missing drvPath")
+		return nil, fmt.Errorf("client: create flake: %w", err)
 	}
 
-	drvPath, err := c.store.ParsePath(pkg.DrvPath)
-	if err != nil {
-		return nil, fmt.Errorf("client: download package: parse drv path: %w", err)
-	}
-	defer func() {
-		_ = drvPath.Close()
-	}()
-
-	realizations, err := c.store.Realise(drvPath)
-	if err != nil {
-		return nil, fmt.Errorf("client: download package: realise package: %w", err)
-	}
-	defer func() {
-		for i := range realizations {
-			_ = realizations[i].Close()
-		}
-	}()
-
-	outputs := make([]DownloadedPackageOutput, 0, len(realizations))
-	for i := range realizations {
-		realizedPath := realizations[i].Path
-		if realizedPath == nil {
-			return nil, fmt.Errorf("client: download package: realization %q has nil path", realizations[i].OutputName)
-		}
-
-		storePath, err := c.store.PrintPath(realizedPath)
-		if err != nil {
-			return nil, fmt.Errorf("client: download package: print output path %q: %w", realizations[i].OutputName, err)
-		}
-
-		realPath, err := c.store.RealPath(realizedPath)
-		if err != nil {
-			return nil, fmt.Errorf("client: download package: real output path %q: %w", realizations[i].OutputName, err)
-		}
-
-		outputs = append(outputs, DownloadedPackageOutput{
-			OutputName: realizations[i].OutputName,
-			StorePath:  storePath,
-			RealPath:   realPath,
-			Name:       realizedPath.Name(),
-			Hash:       realizedPath.Hash(),
-		})
-	}
-
-	return outputs, nil
+	c.resources = append(c.resources, f)
+	return f, nil
 }
 
-// Close releases resources created through c.
+// Close releases tracked flakes, evaluator, store, settings, and context.
 //
-// Close is idempotent. It does not close the Runtime passed to NewClient.
+// Close is idempotent. It attempts every cleanup and joins multiple errors.
 func (c *Client) Close() error {
-	if c.closed {
+	if c == nil || c.ctx == nil {
 		return nil
 	}
 
-	errs := make([]error, 0, len(c.resources)+3)
+	errs := make([]error, 0, len(c.resources)+4)
 	for i := len(c.resources) - 1; i >= 0; i-- {
 		if err := c.resources[i].Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
-
-	c.ctx = nil
-	c.store = nil
-	c.evaluator = nil
-	c.packageProjection = nil
-	c.flakeSettings = nil
-	c.fetcherSettings = nil
 	c.resources = nil
 
-	c.closed = true
+	if err := c.evaluator.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	c.evaluator = nil
+
+	if err := c.store.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	c.store = nil
+
+	if err := c.flakeSettings.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	c.flakeSettings = nil
+
+	if err := c.fetcherSettings.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	c.fetcherSettings = nil
+
+	if err := c.ctx.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	c.ctx = nil
 
 	if len(errs) != 0 {
-		return fmt.Errorf("client: failed to close resources: %w", errors.Join(errs...))
+		return fmt.Errorf("client: close resources: %w", errors.Join(errs...))
+	}
+
+	return nil
+}
+
+func applyClientSettings(ctx *nixcontext.Context, settings map[string]string) error {
+	if value, ok := settings[settingExperimentalFeatures]; ok {
+		if err := ctx.SetSetting(settingExperimentalFeatures, value); err != nil {
+			return fmt.Errorf("client: set %q: %w", settingExperimentalFeatures, err)
+		}
+	}
+
+	keys := make([]string, 0, len(settings))
+	for key := range settings {
+		if key != settingExperimentalFeatures {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		if err := ctx.SetSetting(key, settings[key]); err != nil {
+			return fmt.Errorf("client: set %q: %w", key, err)
+		}
 	}
 
 	return nil

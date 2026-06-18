@@ -7,6 +7,7 @@ import (
 	"github.com/sund3RRR/gonix/fetchers"
 	"github.com/sund3RRR/gonix/flakesettings"
 	"github.com/sund3RRR/gonix/internal/status"
+	"github.com/sund3RRR/gonix/nixcontext"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -30,7 +31,7 @@ const (
 // Nix context, and flake settings used to create it. Close is idempotent, but
 // methods that need the raw locked flake return status.ErrClosed after Close.
 type LockedFlake struct {
-	ctx           *nix.NixCContext
+	ctx           *nixcontext.Context
 	flakeSettings *flakesettings.Settings
 	evaluator     *eval.Evaluator
 	ptr           *nix.NixLockedFlake
@@ -42,13 +43,18 @@ type LockedFlake struct {
 // flakeSettings, and evaluator arguments are borrowed and must outlive the
 // returned LockedFlake.
 func NewLockedFlake(
-	ctx *nix.NixCContext,
+	ctx *nixcontext.Context,
 	fetchSettings *fetchers.Settings,
 	flakeSettings *flakesettings.Settings,
 	evaluator *eval.Evaluator,
 	ref *Ref,
 	opts ...LockOption,
 ) (*LockedFlake, error) {
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("flake: borrow context: %w", err)
+	}
+
 	state, err := evaluator.Borrow()
 	if err != nil {
 		return nil, fmt.Errorf("flake: failed to borrow evaluator: %w", err)
@@ -74,13 +80,13 @@ func NewLockedFlake(
 		return nil, fmt.Errorf("flake: failed to borrow flake settings: %w", err)
 	}
 
-	flags := nix.FlakeLockFlagsNew(ctx, flakeSettingsPtr)
+	flags := nix.FlakeLockFlagsNew(rawCtx, flakeSettingsPtr)
 	if flags == nil {
-		return nil, fmt.Errorf("flake: failed to create lock flags: %w", status.FromContext(ctx))
+		return nil, fmt.Errorf("flake: failed to create lock flags: %w", status.FromContext(rawCtx))
 	}
 	defer nix.FlakeLockFlagsFree(flags)
 
-	if err := applyLockMode(ctx, flags, cfg.mode); err != nil {
+	if err := applyLockMode(rawCtx, flags, cfg.mode); err != nil {
 		return nil, err
 	}
 
@@ -89,14 +95,14 @@ func NewLockedFlake(
 		if err != nil {
 			return nil, fmt.Errorf("flake: failed to borrow input override %q: %w", override.path, err)
 		}
-		if code := nix.FlakeLockFlagsAddInputOverride(ctx, flags, override.path, overridePtr); status.ErrorCode(code) != status.ErrorCodeOK {
-			return nil, fmt.Errorf("flake: failed to add input override %q: %w", override.path, status.FromContext(ctx))
+		if code := nix.FlakeLockFlagsAddInputOverride(rawCtx, flags, override.path, overridePtr); status.ErrorCode(code) != status.ErrorCodeOK {
+			return nil, fmt.Errorf("flake: failed to add input override %q: %w", override.path, status.FromContext(rawCtx))
 		}
 	}
 
-	locked := nix.FlakeLock(ctx, fetchSettingsPtr, flakeSettingsPtr, state, flags, refPtr)
+	locked := nix.FlakeLock(rawCtx, fetchSettingsPtr, flakeSettingsPtr, state, flags, refPtr)
 	if locked == nil {
-		return nil, fmt.Errorf("flake: failed to lock reference: %w", status.FromContext(ctx))
+		return nil, fmt.Errorf("flake: failed to lock reference: %w", status.FromContext(rawCtx))
 	}
 
 	return &LockedFlake{
@@ -113,6 +119,11 @@ func (l *LockedFlake) OutputAttrs() (*eval.Value, error) {
 		return nil, status.ErrClosed
 	}
 
+	rawCtx, err := l.ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("flake: borrow context: %w", err)
+	}
+
 	state, err := l.evaluator.Borrow()
 	if err != nil {
 		return nil, fmt.Errorf("flake: failed to borrow evaluator: %w", err)
@@ -123,15 +134,15 @@ func (l *LockedFlake) OutputAttrs() (*eval.Value, error) {
 		return nil, fmt.Errorf("flake: failed to borrow flake settings: %w", err)
 	}
 
-	ptr := nix.LockedFlakeGetOutputAttrs(l.ctx, flakeSettingsPtr, state, l.ptr)
+	ptr := nix.LockedFlakeGetOutputAttrs(rawCtx, flakeSettingsPtr, state, l.ptr)
 	if ptr == nil {
-		return nil, fmt.Errorf("flake: failed to get output attrs: %w", status.FromContext(l.ctx))
+		return nil, fmt.Errorf("flake: failed to get output attrs: %w", status.FromContext(rawCtx))
 	}
 
 	value, err := l.evaluator.WrapValue(ptr)
 	if err != nil {
-		if code := nix.ValueDecref(l.ctx, ptr); status.ErrorCode(code) != status.ErrorCodeOK {
-			return nil, fmt.Errorf("flake: failed to wrap output attrs and decref value: %w", status.FromContext(l.ctx))
+		if code := nix.ValueDecref(rawCtx, ptr); status.ErrorCode(code) != status.ErrorCodeOK {
+			return nil, fmt.Errorf("flake: failed to wrap output attrs and decref value: %w", status.FromContext(rawCtx))
 		}
 		return nil, fmt.Errorf("flake: failed to wrap output attrs: %w", err)
 	}
@@ -148,6 +159,9 @@ func (l *LockedFlake) Borrow() (*nix.NixLockedFlake, error) {
 	if l.ptr == nil {
 		return nil, status.ErrClosed
 	}
+	if _, err := l.ctx.Borrow(); err != nil {
+		return nil, err
+	}
 
 	return l.ptr, nil
 }
@@ -157,7 +171,7 @@ func (l *LockedFlake) Borrow() (*nix.NixLockedFlake, error) {
 // Close is safe to call more than once. Once Close returns, methods that need
 // the raw locked flake report status.ErrClosed.
 func (l *LockedFlake) Close() error {
-	if l.ptr == nil {
+	if l == nil || l.ptr == nil {
 		return nil
 	}
 

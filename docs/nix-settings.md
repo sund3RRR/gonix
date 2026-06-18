@@ -1,14 +1,15 @@
 # Nix settings
 
-This table lists Nix 2.34.7 settings relevant to `gonix.Runtime`.
+This table lists Nix 2.34.7 settings relevant to `nixcontext.Context` and
+`gonix.ClientConfig`.
 
 Source: local `nix config show --json` from `nix (Nix) 2.34.7`, cross-checked
 with the Nix 2.34.7 `nix.conf` manual.
 
-`Runtime.SetSetting` and raw `WithSetting` pass values to Nix as strings. The
-`Type` column describes the expected string shape. List-like values are
-whitespace-separated unless noted otherwise. Integer settings accept Nix integer
-suffixes `K`, `M`, `G`, and `T`.
+`Context.SetSetting` and `ClientConfig.RawSettings` pass values to Nix as
+strings. The `Type` column describes the expected string shape. List-like
+values are whitespace-separated unless noted otherwise. Integer settings accept
+Nix integer suffixes `K`, `M`, `G`, and `T`.
 
 Defaults that depend on the current machine, platform, Nix installation, or
 system capabilities are written as `system host`.

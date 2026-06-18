@@ -12,6 +12,7 @@ import (
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/internal/utils"
+	"github.com/sund3RRR/gonix/nixcontext"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -26,7 +27,7 @@ import (
 // but all other methods return an error wrapping status.ErrClosed after Close.
 // Store is not documented as goroutine-safe.
 type Store struct {
-	ctx *nix.NixCContext
+	ctx *nixcontext.Context
 	ptr *nix.Store
 }
 
@@ -40,7 +41,12 @@ type Store struct {
 // The returned Store owns the raw Nix store handle and must be closed by the
 // caller. The ctx argument is borrowed and must remain valid for as long as the
 // Store is used.
-func New(ctx *nix.NixCContext, uri string, opts ...Option) (*Store, error) {
+func New(ctx *nixcontext.Context, uri string, opts ...Option) (*Store, error) {
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("store: borrow context: %w", err)
+	}
+
 	var cfg Config
 	for _, opt := range opts {
 		opt(&cfg)
@@ -71,9 +77,9 @@ func New(ctx *nix.NixCContext, uri string, opts ...Option) (*Store, error) {
 		defer storeParams.Free()
 	}
 
-	ptr := nix.StoreOpen(ctx, uri, storeParams)
+	ptr := nix.StoreOpen(rawCtx, uri, storeParams)
 	if ptr == nil {
-		return nil, fmt.Errorf("store: failed to open store: %w", status.FromContext(ctx))
+		return nil, fmt.Errorf("store: failed to open store: %w", status.FromContext(rawCtx))
 	}
 
 	return &Store{
@@ -92,9 +98,14 @@ func (s *Store) Version() (string, error) {
 		return "", status.ErrClosed
 	}
 
-	ptr := nix.StoreGetVersion(s.ctx, s.ptr)
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return "", err
+	}
+
+	ptr := nix.StoreGetVersion(rawCtx, s.ptr)
 	if ptr == nil {
-		if err := status.FromContext(s.ctx); err != nil {
+		if err := status.FromContext(rawCtx); err != nil {
 			return "", fmt.Errorf("store: failed to get version: %w", err)
 		}
 		return "", nil
@@ -113,6 +124,9 @@ func (p *Store) Borrow() (*nix.Store, error) {
 	if p.ptr == nil {
 		return nil, status.ErrClosed
 	}
+	if _, err := p.ctx.Borrow(); err != nil {
+		return nil, err
+	}
 
 	return p.ptr, nil
 }
@@ -122,7 +136,7 @@ func (p *Store) Borrow() (*nix.Store, error) {
 // Close is safe to call more than once. Once Close returns, methods that need
 // the raw store handle report status.ErrClosed.
 func (s *Store) Close() error {
-	if s.ptr == nil {
+	if s == nil || s.ptr == nil {
 		return nil
 	}
 

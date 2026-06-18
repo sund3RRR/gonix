@@ -8,6 +8,7 @@ import (
 	"unsafe"
 
 	"github.com/sund3RRR/gonix/internal/status"
+	"github.com/sund3RRR/gonix/nixcontext"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -34,30 +35,33 @@ const testDerivationJSON = `{
   }
 }`
 
-func newDerivationTestContext(t *testing.T) *nix.NixCContext {
+func newDerivationTestContext(t *testing.T) *nixcontext.Context {
 	t.Helper()
 
-	ctx := nix.CContextCreate()
-	if ctx == nil {
-		t.Fatal("CContextCreate returned nil")
+	ctx, err := nixcontext.New(nixcontext.Config{})
+	if err != nil {
+		t.Fatalf("nixcontext.New() error = %v", err)
 	}
 	t.Cleanup(func() {
-		nix.CContextFree(ctx)
+		if err := ctx.Close(); err != nil {
+			t.Fatalf("Context.Close() error = %v", err)
+		}
 	})
 
 	return ctx
 }
 
-func newDerivationTestStore(t *testing.T, ctx *nix.NixCContext) *nix.Store {
+func newDerivationTestStore(t *testing.T, ctx *nixcontext.Context) *nix.Store {
 	t.Helper()
 
-	if got := nix.LibstoreInitNoLoadConfig(ctx); got != nix.NixOk {
-		t.Fatalf("LibstoreInitNoLoadConfig = %v, want %v: %s", got, nix.NixOk, derivationStatusMessage(ctx))
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		t.Fatalf("Context.Borrow() error = %v", err)
 	}
 
-	store := nix.StoreOpen(ctx, "dummy://", nix.StoreParams{})
+	store := nix.StoreOpen(rawCtx, "dummy://", nix.StoreParams{})
 	if store == nil {
-		t.Fatalf("StoreOpen(dummy://) returned nil: err=%v msg=%q", nix.ErrCode(ctx), derivationStatusMessage(ctx))
+		t.Fatalf("StoreOpen(dummy://) returned nil: err=%v msg=%q", nix.ErrCode(rawCtx), derivationStatusMessage(rawCtx))
 	}
 	t.Cleanup(func() {
 		nix.StoreFree(store)
@@ -71,9 +75,13 @@ func newTestDerivation(t *testing.T) *Derivation {
 
 	ctx := newDerivationTestContext(t)
 	store := newDerivationTestStore(t, ctx)
-	ptr := nix.DerivationFromJson(ctx, store, testDerivationJSON)
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		t.Fatalf("Context.Borrow() error = %v", err)
+	}
+	ptr := nix.DerivationFromJson(rawCtx, store, testDerivationJSON)
 	if ptr == nil {
-		t.Fatalf("DerivationFromJson returned nil: err=%v msg=%q", nix.ErrCode(ctx), derivationStatusMessage(ctx))
+		t.Fatalf("DerivationFromJson returned nil: err=%v msg=%q", nix.ErrCode(rawCtx), derivationStatusMessage(rawCtx))
 	}
 
 	d := NewDerivation(ctx, ptr)

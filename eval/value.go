@@ -5,6 +5,7 @@ import (
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/internal/utils"
+	"github.com/sund3RRR/gonix/nixcontext"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -86,7 +87,7 @@ func (vt ValueType) String() string {
 // getters live on Value; operations that need an EvalState live on Evaluator.
 // Close releases the owned value reference and is idempotent.
 type Value struct {
-	ctx   *nix.NixCContext
+	ctx   *nixcontext.Context
 	ptr   *nix.NixValue
 	owner *Evaluator
 }
@@ -97,8 +98,13 @@ func (v *Value) Type() (ValueType, error) {
 		return 0, status.ErrClosed
 	}
 
-	typ := nix.GetType(v.ctx, v.ptr)
-	if err := status.FromContext(v.ctx); err != nil {
+	rawCtx, err := v.ctx.Borrow()
+	if err != nil {
+		return 0, err
+	}
+
+	typ := nix.GetType(rawCtx, v.ptr)
+	if err := status.FromContext(rawCtx); err != nil {
 		return 0, fmt.Errorf("eval: failed to get value type: %w", err)
 	}
 
@@ -111,9 +117,14 @@ func (v *Value) TypeName() (string, error) {
 		return "", status.ErrClosed
 	}
 
-	ptr := nix.GetTypename(v.ctx, v.ptr)
+	rawCtx, err := v.ctx.Borrow()
+	if err != nil {
+		return "", err
+	}
+
+	ptr := nix.GetTypename(rawCtx, v.ptr)
 	if ptr == nil {
-		return "", fmt.Errorf("eval: failed to get value type name: %w", status.FromContext(v.ctx))
+		return "", fmt.Errorf("eval: failed to get value type name: %w", status.FromContext(rawCtx))
 	}
 
 	return utils.TakeCString(ptr), nil
@@ -125,8 +136,13 @@ func (v *Value) Bool() (bool, error) {
 		return false, status.ErrClosed
 	}
 
-	got := nix.GetBool(v.ctx, v.ptr)
-	if err := status.FromContext(v.ctx); err != nil {
+	rawCtx, err := v.ctx.Borrow()
+	if err != nil {
+		return false, err
+	}
+
+	got := nix.GetBool(rawCtx, v.ptr)
+	if err := status.FromContext(rawCtx); err != nil {
 		return false, fmt.Errorf("eval: failed to get bool: %w", err)
 	}
 
@@ -139,8 +155,13 @@ func (v *Value) Int() (int64, error) {
 		return 0, status.ErrClosed
 	}
 
-	got := nix.GetInt(v.ctx, v.ptr)
-	if err := status.FromContext(v.ctx); err != nil {
+	rawCtx, err := v.ctx.Borrow()
+	if err != nil {
+		return 0, err
+	}
+
+	got := nix.GetInt(rawCtx, v.ptr)
+	if err := status.FromContext(rawCtx); err != nil {
 		return 0, fmt.Errorf("eval: failed to get int: %w", err)
 	}
 
@@ -153,8 +174,13 @@ func (v *Value) Float() (float64, error) {
 		return 0, status.ErrClosed
 	}
 
-	got := nix.GetFloat(v.ctx, v.ptr)
-	if err := status.FromContext(v.ctx); err != nil {
+	rawCtx, err := v.ctx.Borrow()
+	if err != nil {
+		return 0, err
+	}
+
+	got := nix.GetFloat(rawCtx, v.ptr)
+	if err := status.FromContext(rawCtx); err != nil {
 		return 0, fmt.Errorf("eval: failed to get float: %w", err)
 	}
 
@@ -167,9 +193,14 @@ func (v *Value) String() (string, error) {
 		return "", status.ErrClosed
 	}
 
-	ptr := nix.GetString(v.ctx, v.ptr)
+	rawCtx, err := v.ctx.Borrow()
+	if err != nil {
+		return "", err
+	}
+
+	ptr := nix.GetString(rawCtx, v.ptr)
 	if ptr == nil {
-		return "", fmt.Errorf("eval: failed to get string: %w", status.FromContext(v.ctx))
+		return "", fmt.Errorf("eval: failed to get string: %w", status.FromContext(rawCtx))
 	}
 
 	return utils.TakeCString(ptr), nil
@@ -181,9 +212,14 @@ func (v *Value) PathString() (string, error) {
 		return "", status.ErrClosed
 	}
 
-	ptr := nix.GetPathString(v.ctx, v.ptr)
+	rawCtx, err := v.ctx.Borrow()
+	if err != nil {
+		return "", err
+	}
+
+	ptr := nix.GetPathString(rawCtx, v.ptr)
 	if ptr == nil {
-		return "", fmt.Errorf("eval: failed to get path string: %w", status.FromContext(v.ctx))
+		return "", fmt.Errorf("eval: failed to get path string: %w", status.FromContext(rawCtx))
 	}
 
 	return utils.TakeCString(ptr), nil
@@ -195,8 +231,13 @@ func (v *Value) ListLen() (uint32, error) {
 		return 0, status.ErrClosed
 	}
 
-	got := nix.GetListSize(v.ctx, v.ptr)
-	if err := status.FromContext(v.ctx); err != nil {
+	rawCtx, err := v.ctx.Borrow()
+	if err != nil {
+		return 0, err
+	}
+
+	got := nix.GetListSize(rawCtx, v.ptr)
+	if err := status.FromContext(rawCtx); err != nil {
 		return 0, fmt.Errorf("eval: failed to get list size: %w", err)
 	}
 
@@ -209,8 +250,13 @@ func (v *Value) AttrLen() (uint32, error) {
 		return 0, status.ErrClosed
 	}
 
-	got := nix.GetAttrsSize(v.ctx, v.ptr)
-	if err := status.FromContext(v.ctx); err != nil {
+	rawCtx, err := v.ctx.Borrow()
+	if err != nil {
+		return 0, err
+	}
+
+	got := nix.GetAttrsSize(rawCtx, v.ptr)
+	if err := status.FromContext(rawCtx); err != nil {
 		return 0, fmt.Errorf("eval: failed to get attrs size: %w", err)
 	}
 
@@ -226,6 +272,9 @@ func (v *Value) Borrow() (*nix.NixValue, error) {
 	if v.ptr == nil {
 		return nil, status.ErrClosed
 	}
+	if _, err := v.ctx.Borrow(); err != nil {
+		return nil, err
+	}
 
 	return v.ptr, nil
 }
@@ -235,16 +284,21 @@ func (v *Value) Borrow() (*nix.NixValue, error) {
 // Close is safe to call more than once. Once Close returns, methods that need
 // the raw value handle report status.ErrClosed.
 func (v *Value) Close() error {
-	if v.ptr == nil {
+	if v == nil || v.ptr == nil {
 		return nil
+	}
+
+	rawCtx, err := v.ctx.Borrow()
+	if err != nil {
+		return fmt.Errorf("eval: borrow context while closing value: %w", err)
 	}
 
 	defer func() {
 		v.ptr = nil
 	}()
 
-	if code := nix.ValueDecref(v.ctx, v.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
-		return fmt.Errorf("eval: failed to decref value: %w", status.FromContext(v.ctx))
+	if code := nix.ValueDecref(rawCtx, v.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
+		return fmt.Errorf("eval: failed to decref value: %w", status.FromContext(rawCtx))
 	}
 
 	return nil

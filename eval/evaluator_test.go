@@ -9,32 +9,43 @@ import (
 
 	"github.com/sund3RRR/gonix"
 	"github.com/sund3RRR/gonix/eval"
+	"github.com/sund3RRR/gonix/nixcontext"
+	"github.com/sund3RRR/gonix/store"
 )
 
-func newTestEvaluator(t *testing.T) (*gonix.Runtime, *eval.Evaluator) {
+func newTestEvaluator(t *testing.T) (*nixcontext.Context, *eval.Evaluator) {
 	t.Helper()
 
-	r, err := gonix.NewRuntime()
+	ctx, err := nixcontext.New(nixcontext.Config{})
 	if err != nil {
-		t.Fatalf("gonix.NewRuntime() error = %v", err)
+		t.Fatalf("nixcontext.New() error = %v", err)
+	}
+
+	s, err := store.New(ctx, "dummy://")
+	if err != nil {
+		_ = ctx.Close()
+		t.Fatalf("store.New() error = %v", err)
+	}
+
+	e, err := eval.New(ctx, s)
+	if err != nil {
+		_ = s.Close()
+		_ = ctx.Close()
+		t.Fatalf("eval.New() error = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := r.Close(); err != nil {
-			t.Fatalf("Runtime.Close() error = %v", err)
+		if err := e.Close(); err != nil {
+			t.Fatalf("Evaluator.Close() error = %v", err)
+		}
+		if err := s.Close(); err != nil {
+			t.Fatalf("Store.Close() error = %v", err)
+		}
+		if err := ctx.Close(); err != nil {
+			t.Fatalf("Context.Close() error = %v", err)
 		}
 	})
 
-	s, err := r.OpenStore("dummy://")
-	if err != nil {
-		t.Fatalf("Runtime.OpenStore() error = %v", err)
-	}
-
-	e, err := r.NewEvaluator(s)
-	if err != nil {
-		t.Fatalf("Runtime.NewEvaluator() error = %v", err)
-	}
-
-	return r, e
+	return ctx, e
 }
 
 func requireClosedError(t *testing.T, err error) {
@@ -364,7 +375,7 @@ func TestEvaluatorRealiseString(t *testing.T) {
 }
 
 func TestEvaluatorLifecycleAndOriginValidation(t *testing.T) {
-	r, e := newTestEvaluator(t)
+	ctx, e := newTestEvaluator(t)
 
 	value, err := e.NewValue(eval.Int(1))
 	if err != nil {
@@ -395,18 +406,21 @@ func TestEvaluatorLifecycleAndOriginValidation(t *testing.T) {
 	_, err = e.EvalString("1", ".")
 	requireClosedError(t, err)
 
-	s, err := r.OpenStore("dummy://")
+	s, err := store.New(ctx, "dummy://")
 	if err != nil {
-		t.Fatalf("Runtime.OpenStore(second) error = %v", err)
+		t.Fatalf("store.New(second) error = %v", err)
 	}
-	e1, err := r.NewEvaluator(s)
+	t.Cleanup(func() { _ = s.Close() })
+	e1, err := eval.New(ctx, s)
 	if err != nil {
-		t.Fatalf("Runtime.NewEvaluator(e1) error = %v", err)
+		t.Fatalf("eval.New(e1) error = %v", err)
 	}
-	e2, err := r.NewEvaluator(s)
+	t.Cleanup(func() { _ = e1.Close() })
+	e2, err := eval.New(ctx, s)
 	if err != nil {
-		t.Fatalf("Runtime.NewEvaluator(e2) error = %v", err)
+		t.Fatalf("eval.New(e2) error = %v", err)
 	}
+	t.Cleanup(func() { _ = e2.Close() })
 	foreign, err := e1.NewValue(eval.Int(3))
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue(foreign) error = %v", err)
@@ -416,34 +430,37 @@ func TestEvaluatorLifecycleAndOriginValidation(t *testing.T) {
 	}
 }
 
-func TestRuntimeNewEvaluatorLifecycle(t *testing.T) {
-	r, err := gonix.NewRuntime()
+func TestContextEvaluatorLifecycle(t *testing.T) {
+	ctx, err := nixcontext.New(nixcontext.Config{})
 	if err != nil {
-		t.Fatalf("gonix.NewRuntime() error = %v", err)
+		t.Fatalf("nixcontext.New() error = %v", err)
 	}
 
-	s, err := r.OpenStore("dummy://")
+	s, err := store.New(ctx, "dummy://")
 	if err != nil {
-		t.Fatalf("Runtime.OpenStore() error = %v", err)
+		t.Fatalf("store.New() error = %v", err)
 	}
-	e, err := r.NewEvaluator(s, eval.WithLookupPath("nixpkgs=/no-such-path"))
+	e, err := eval.New(ctx, s, eval.WithLookupPath("nixpkgs=/no-such-path"))
 	if err != nil {
-		t.Fatalf("Runtime.NewEvaluator() error = %v", err)
+		t.Fatalf("eval.New() error = %v", err)
 	}
 	v, err := e.NewValue(eval.Int(9))
 	if err != nil {
 		t.Fatalf("Evaluator.NewValue() error = %v", err)
 	}
 
-	if err := r.Close(); err != nil {
-		t.Fatalf("Runtime.Close() error = %v", err)
-	}
 	if err := e.Close(); err != nil {
-		t.Fatalf("Evaluator.Close() after Runtime.Close() error = %v", err)
+		t.Fatalf("Evaluator.Close() error = %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Store.Close() error = %v", err)
+	}
+	if err := ctx.Close(); err != nil {
+		t.Fatalf("Context.Close() error = %v", err)
 	}
 	_, err = v.Int()
 	requireClosedError(t, err)
 
-	_, err = r.NewEvaluator(s)
+	_, err = eval.New(ctx, s)
 	requireClosedError(t, err)
 }

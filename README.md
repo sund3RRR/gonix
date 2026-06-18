@@ -10,15 +10,34 @@ The goal of this package is to expose Nix concepts through Go-native APIs:
 contexts, stores, store paths, evaluation states, values, derivations, flakes,
 locked flakes, realised outputs, closures, settings, and structured errors.
 
+## Quick start
+
+```go
+client, err := gonix.NewClient(gonix.ClientConfig{})
+if err != nil {
+	return err
+}
+defer client.Close()
+
+f, err := client.NewFlake("github:NixOS/nixpkgs/nixos-unstable")
+if err != nil {
+	return err
+}
+defer f.Close()
+
+pkg, err := f.FetchPackage("hello")
+```
+
 ## Implementation status
 
-`gonix` is currently an early SDK foundation. The implemented surface is useful
-for runtime and store-backed workflows, but the broader high-level SDK is still
-in progress.
+`gonix` is currently an early SDK foundation. `Client` provides a flake-first
+quick start, while `nixcontext` and the public subpackages support lower-level
+composition.
 
-- [x] Runtime and settings foundation.
-  - [x] Runtime initialization and shutdown.
-  - [x] Runtime options for selected Nix settings, verbosity, and log format.
+- [x] Context, Client, and settings foundation.
+  - [x] Nix context initialization and shutdown.
+  - [x] Flake-ready Client configuration.
+  - [x] Selected Nix settings, verbosity, and log format.
   - [x] Structured Nix error conversion.
 - [x] Store and store path foundation.
   - [x] Store opening and store metadata.

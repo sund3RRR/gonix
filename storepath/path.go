@@ -6,6 +6,7 @@ import (
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/internal/utils"
+	"github.com/sund3RRR/gonix/nixcontext"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -20,7 +21,7 @@ import (
 type Path struct {
 	name string
 	hash [20]byte
-	ctx  *nix.NixCContext
+	ctx  *nixcontext.Context
 	ptr  *nix.StorePath
 }
 
@@ -28,18 +29,26 @@ type Path struct {
 //
 // The returned Path owns ptr and will release it with Close. Passing nil ptr
 // creates a closed Path. Passing nil ctx is a caller error.
-func New(ctx *nix.NixCContext, ptr *nix.StorePath) (*Path, error) {
+func New(ctx *nixcontext.Context, ptr *nix.StorePath) (*Path, error) {
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("storepath: borrow context: %w", err)
+	}
+	if ptr == nil {
+		return &Path{ctx: ctx}, nil
+	}
+
 	namePtr := nix.StorePathName(ptr)
 	if namePtr == nil {
-		return nil, fmt.Errorf("storepath: failed to get store path name: %w", status.FromContext(ctx))
+		return nil, fmt.Errorf("storepath: failed to get store path name: %w", status.FromContext(rawCtx))
 	}
 	name := utils.TakeCString(namePtr)
 
 	var hash nix.StorePathHashPart
 	defer hash.Free()
 
-	if code := nix.StorePathHash(ctx, ptr, &hash); status.ErrorCode(code) != status.ErrorCodeOK {
-		return nil, fmt.Errorf("storepath: failed to get store path hash: %w", status.FromContext(ctx))
+	if code := nix.StorePathHash(rawCtx, ptr, &hash); status.ErrorCode(code) != status.ErrorCodeOK {
+		return nil, fmt.Errorf("storepath: failed to get store path hash: %w", status.FromContext(rawCtx))
 	}
 
 	hash.Deref()
@@ -53,13 +62,18 @@ func New(ctx *nix.NixCContext, ptr *nix.StorePath) (*Path, error) {
 }
 
 // FromParts creates a store path from a raw 20-byte hash part and a name.
-func FromParts(ctx *nix.NixCContext, hash [20]byte, name string) (*Path, error) {
+func FromParts(ctx *nixcontext.Context, hash [20]byte, name string) (*Path, error) {
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("storepath: borrow context: %w", err)
+	}
+
 	rawHash := nix.StorePathHashPart{Bytes: hash}
 	defer rawHash.Free()
 
-	ptr := nix.StoreCreateFromParts(ctx, &rawHash, name, uint64(len(name)))
+	ptr := nix.StoreCreateFromParts(rawCtx, &rawHash, name, uint64(len(name)))
 	if ptr == nil {
-		return nil, fmt.Errorf("storepath: failed to create store path from parts: %w", status.FromContext(ctx))
+		return nil, fmt.Errorf("storepath: failed to create store path from parts: %w", status.FromContext(rawCtx))
 	}
 
 	return &Path{
@@ -86,9 +100,14 @@ func (p *Path) Clone() (*Path, error) {
 		return nil, status.ErrClosed
 	}
 
+	rawCtx, err := p.ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("storepath: borrow context: %w", err)
+	}
+
 	clonePtr := nix.StorePathClone(p.ptr)
 	if clonePtr == nil {
-		return nil, fmt.Errorf("storepath: failed to clone store path: %w", status.FromContext(p.ctx))
+		return nil, fmt.Errorf("storepath: failed to clone store path: %w", status.FromContext(rawCtx))
 	}
 
 	path, err := New(p.ctx, clonePtr)
@@ -108,13 +127,16 @@ func (p *Path) Borrow() (*nix.StorePath, error) {
 	if p.ptr == nil {
 		return nil, status.ErrClosed
 	}
+	if _, err := p.ctx.Borrow(); err != nil {
+		return nil, err
+	}
 
 	return p.ptr, nil
 }
 
 // Close releases the owned Nix store path handle and is safe to call more than once.
 func (p *Path) Close() error {
-	if p.ptr == nil {
+	if p == nil || p.ptr == nil {
 		return nil
 	}
 

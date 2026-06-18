@@ -8,6 +8,7 @@ import (
 	"github.com/sund3RRR/gonix/flakesettings"
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/internal/utils"
+	"github.com/sund3RRR/gonix/nixcontext"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
@@ -17,7 +18,7 @@ import (
 // fetcher settings, and flake settings used to parse it. Close is idempotent,
 // but methods that need the raw reference return status.ErrClosed after Close.
 type Ref struct {
-	ctx      *nix.NixCContext
+	ctx      *nixcontext.Context
 	ptr      *nix.NixFlakeReference
 	fragment string
 }
@@ -27,12 +28,17 @@ type Ref struct {
 // The returned Ref owns the raw flake reference. The ctx, fetchSettings, and
 // flakeSettings arguments are borrowed and must outlive the returned Ref.
 func NewParsedRef(
-	ctx *nix.NixCContext,
+	ctx *nixcontext.Context,
 	fetchSettings *fetchers.Settings,
 	flakeSettings *flakesettings.Settings,
 	ref string,
 	opts ...ParseOption,
 ) (*Ref, error) {
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("flake: borrow context: %w", err)
+	}
+
 	var cfg parseConfig
 	for _, opt := range opts {
 		opt(&cfg)
@@ -48,27 +54,27 @@ func NewParsedRef(
 		return nil, fmt.Errorf("flake: failed to borrow flake settings: %w", err)
 	}
 
-	flags := nix.FlakeReferenceParseFlagsNew(ctx, flakeSettingsPtr)
+	flags := nix.FlakeReferenceParseFlagsNew(rawCtx, flakeSettingsPtr)
 	if flags == nil {
-		return nil, fmt.Errorf("flake: failed to create parse flags: %w", status.FromContext(ctx))
+		return nil, fmt.Errorf("flake: failed to create parse flags: %w", status.FromContext(rawCtx))
 	}
 	defer nix.FlakeReferenceParseFlagsFree(flags)
 
 	if cfg.baseDirectory != "" {
-		if code := nix.FlakeReferenceParseFlagsSetBaseDirectory(ctx, flags, cfg.baseDirectory, uint64(len(cfg.baseDirectory))); status.ErrorCode(code) != status.ErrorCodeOK {
-			return nil, fmt.Errorf("flake: failed to set base directory: %w", status.FromContext(ctx))
+		if code := nix.FlakeReferenceParseFlagsSetBaseDirectory(rawCtx, flags, cfg.baseDirectory, uint64(len(cfg.baseDirectory))); status.ErrorCode(code) != status.ErrorCodeOK {
+			return nil, fmt.Errorf("flake: failed to set base directory: %w", status.FromContext(rawCtx))
 		}
 	}
 
-	result := nix.FlakeReferenceAndFragmentFromString(ctx, fetchSettingsPtr, flakeSettingsPtr, flags, ref, uint64(len(ref)))
+	result := nix.FlakeReferenceAndFragmentFromString(rawCtx, fetchSettingsPtr, flakeSettingsPtr, flags, ref, uint64(len(ref)))
 	if result == nil {
-		return nil, fmt.Errorf("flake: failed to parse reference %q: %w", ref, status.FromContext(ctx))
+		return nil, fmt.Errorf("flake: failed to parse reference %q: %w", ref, status.FromContext(rawCtx))
 	}
 	defer nix.FlakeReferenceResultFree(result)
 
 	ptr := nix.FlakeReferenceResultTakeReference(result)
 	if ptr == nil {
-		return nil, fmt.Errorf("flake: failed to take parsed reference: %w", status.FromContext(ctx))
+		return nil, fmt.Errorf("flake: failed to take parsed reference: %w", status.FromContext(rawCtx))
 	}
 
 	fragment := utils.TakeCString(nix.FlakeReferenceResultTakeFragment(result))
@@ -93,6 +99,9 @@ func (r *Ref) Borrow() (*nix.NixFlakeReference, error) {
 	if r.ptr == nil {
 		return nil, status.ErrClosed
 	}
+	if _, err := r.ctx.Borrow(); err != nil {
+		return nil, err
+	}
 
 	return r.ptr, nil
 }
@@ -102,7 +111,7 @@ func (r *Ref) Borrow() (*nix.NixFlakeReference, error) {
 // Close is safe to call more than once. Once Close returns, methods that need
 // the raw reference report status.ErrClosed.
 func (r *Ref) Close() error {
-	if r.ptr == nil {
+	if r == nil || r.ptr == nil {
 		return nil
 	}
 
