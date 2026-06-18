@@ -98,9 +98,7 @@ func (c *Flake) FetchPackage(name string, opts ...FetchPackageOption) (Package, 
 	if err != nil {
 		return Package{}, fmt.Errorf("flake: fetch package: output attrs: %w", err)
 	}
-	defer func() {
-		_ = outputs.Close()
-	}()
+	defer outputs.Close() //nolint:errcheck
 
 	args := map[string]eval.GoValue{
 		"outputs": eval.Copy(outputs),
@@ -114,17 +112,13 @@ func (c *Flake) FetchPackage(name string, opts ...FetchPackageOption) (Package, 
 	if err != nil {
 		return Package{}, fmt.Errorf("flake: fetch package: build projection argument: %w", err)
 	}
-	defer func() {
-		_ = arg.Close()
-	}()
+	defer arg.Close() //nolint:errcheck
 
 	value, err := c.evaluator.Call(c.packageProjection, arg)
 	if err != nil {
 		return Package{}, fmt.Errorf("flake: fetch package: call projection: %w", err)
 	}
-	defer func() {
-		_ = value.Close()
-	}()
+	defer value.Close() //nolint:errcheck
 
 	var pkg Package
 	if err := c.evaluator.Unmarshal(value, &pkg); err != nil {
@@ -155,9 +149,7 @@ func (c *Flake) DownloadPackage(pkg Package) ([]DownloadedPackageOutput, error) 
 	if err != nil {
 		return nil, fmt.Errorf("flake: download package: parse drv path: %w", err)
 	}
-	defer func() {
-		_ = drvPath.Close()
-	}()
+	defer drvPath.Close() //nolint:errcheck
 
 	realizations, err := c.store.Realise(drvPath)
 	if err != nil {
@@ -202,34 +194,26 @@ func (c *Flake) DownloadPackage(pkg Package) ([]DownloadedPackageOutput, error) 
 //
 // Close is idempotent and also cleans up a partially initialized Flake.
 func (f *Flake) Close() error {
-	if f == nil {
+	if f == nil || f.lock == nil {
 		return nil
 	}
 
 	errs := make([]error, 0, 3)
 
-	if f.packageProjection != nil {
-		if err := f.packageProjection.Close(); err != nil {
-			errs = append(errs, err)
-		}
-		f.packageProjection = nil
+	if err := f.packageProjection.Close(); err != nil {
+		errs = append(errs, err)
 	}
+	f.packageProjection = nil
 
-	if f.lock != nil {
-		if err := f.lock.Close(); err != nil {
-			errs = append(errs, err)
-		}
-		f.lock = nil
+	if err := f.lock.Close(); err != nil {
+		errs = append(errs, err)
 	}
+	f.lock = nil
 
-	if f.parsedRef != nil {
-		if err := f.parsedRef.Close(); err != nil {
-			errs = append(errs, err)
-		}
-		f.parsedRef = nil
+	if err := f.parsedRef.Close(); err != nil {
+		errs = append(errs, err)
 	}
-	f.store = nil
-	f.evaluator = nil
+	f.parsedRef = nil
 
 	if len(errs) != 0 {
 		return fmt.Errorf("flake: failed to close resources: %w", errors.Join(errs...))

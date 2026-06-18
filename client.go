@@ -92,9 +92,6 @@ func (c *Client) NewFlake(ref string, opts ...FlakeOption) (*Flake, error) {
 	if c.ctx == nil {
 		return nil, status.ErrClosed
 	}
-	if _, err := c.ctx.Borrow(); err != nil {
-		return nil, err
-	}
 
 	f, err := NewFlake(c.ctx, c.fetcherSettings, c.flakeSettings, c.store, c.evaluator, ref, opts...)
 	if err != nil {
