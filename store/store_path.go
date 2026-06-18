@@ -119,7 +119,10 @@ func (s *Store) PathFromHash(hashPart []byte) (*storepath.Path, error) {
 
 	ptr := nix.StoreQueryPathFromHashPart(rawCtx, s.ptr, string(hashPart))
 	if ptr == nil {
-		return nil, pathFromHashError(rawCtx, hashPart)
+		if err := status.FromContext(rawCtx); err != nil {
+			return nil, fmt.Errorf("store: failed to get path from hash: %w", err)
+		}
+		return nil, fmt.Errorf("store: hash %q: %w", hashPart, ErrPathNotFound)
 	}
 
 	path, err := storepath.New(s.ctx, ptr)
@@ -129,13 +132,6 @@ func (s *Store) PathFromHash(hashPart []byte) (*storepath.Path, error) {
 	}
 
 	return path, nil
-}
-
-func pathFromHashError(rawCtx *nix.NixCContext, hashPart []byte) error {
-	if err := status.FromContext(rawCtx); err != nil {
-		return fmt.Errorf("store: failed to get path from hash: %w", err)
-	}
-	return fmt.Errorf("store: hash %q: %w", hashPart, ErrPathNotFound)
 }
 
 // RealPath returns the concrete filesystem path for path in this store.
