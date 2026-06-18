@@ -169,6 +169,7 @@ Typical creation and workflow surface:
 - `Client.ParseFlakeRef(ref string, opts ...flake.ParseOption) (*flake.Ref, error)`
 - `Client.LockFlake(ref *flake.Ref, opts ...flake.LockOption) (*flake.LockedFlake, error)`
 - `Client.FetchPackage(locked *flake.LockedFlake, name string, opts ...FetchPackageOption) (Package, error)`
+- `Client.DownloadPackage(locked *flake.LockedFlake, name string, opts ...DownloadPackageOption) ([]DownloadedPackageOutput, error)`
 
 Client methods own the workflow resources they create and require the borrowed
 runtime to outlive the client.
@@ -186,7 +187,7 @@ Store creation:
 Core methods:
 
 - metadata: `URI`, `StoreDir`, `Version`;
-- paths: `ParsePath`, `PathFromHash`, `RealPath`, `IsValidPath`;
+- paths: `ParsePath`, `PathFromHash`, `PrintPath`, `RealPath`, `IsValidPath`;
 - derivations: `DerivationFromJSON`, `DerivationFromPath`, `AddDerivation`;
 - realization: `Realise`;
 - closure: `Closure(path, opts...)`, `CopyClosure`;
@@ -376,7 +377,8 @@ The main v1 method can be:
 - `OutputAttrs() (*eval.Value, error)`
 
 Higher-level traversal should build on `Evaluator.Attr(value, name)` or
-`Client.FetchPackage`.
+`Client.FetchPackage`. Store-backed package realization should build on
+`Client.DownloadPackage` when callers want pure Go output DTOs.
 
 ### Package
 
@@ -388,6 +390,11 @@ Expected shape:
 - contains Go-native package fields, output metadata, source metadata, and
   normalized nixpkgs `meta` fields;
 - does not own or borrow raw Nix values.
+
+`Client.DownloadPackage` realizes every package output through the client store
+and returns `[]DownloadedPackageOutput`. Those result values are pure Go DTOs:
+they contain the output name, logical store path, real filesystem path, store
+path name, and hash, but do not own Nix resources and do not need to be closed.
 
 ## Dependency graph
 

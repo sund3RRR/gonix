@@ -29,3 +29,17 @@ func WithFetchPackageSystem(system string) FetchPackageOption {
 		c.system = system
 	}
 }
+
+// DownloadPackageOption configures DownloadPackage.
+type DownloadPackageOption func(*downloadPackageConfig)
+
+type downloadPackageConfig struct {
+	system string
+}
+
+// WithDownloadPackageSystem overrides the package system for one DownloadPackage call.
+func WithDownloadPackageSystem(system string) DownloadPackageOption {
+	return func(c *downloadPackageConfig) {
+		c.system = system
+	}
+}

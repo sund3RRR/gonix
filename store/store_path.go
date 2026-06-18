@@ -66,6 +66,28 @@ func (s *Store) ParsePath(pathStr string) (*storepath.Path, error) {
 	return path, nil
 }
 
+// PrintPath formats path as a logical store path for this store.
+//
+// PrintPath uses the store's logical store directory. For rooted or redirected
+// stores, use RealPath when the concrete filesystem path is needed.
+func (s *Store) PrintPath(path *storepath.Path) (string, error) {
+	if s.ptr == nil {
+		return "", status.ErrClosed
+	}
+
+	pathPtr, err := path.Borrow()
+	if err != nil {
+		return "", fmt.Errorf("store: failed to borrow path: %w", err)
+	}
+
+	ptr := nix.StorePrintPath(s.ctx, s.ptr, pathPtr)
+	if ptr == nil {
+		return "", fmt.Errorf("store: failed to print path: %w", status.FromContext(s.ctx))
+	}
+
+	return utils.TakeCString(ptr), nil
+}
+
 // PathFromHash returns the store path whose hash part matches hashPart.
 //
 // hashPart is the encoded hash portion of a Nix store path, without the store

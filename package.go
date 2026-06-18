@@ -68,6 +68,18 @@ type PackageOutput struct {
 	OutputName string      `nix:"outputName" json:"outputName" validate:"optional"`
 }
 
+// DownloadedPackageOutput describes one realized package output.
+//
+// It contains only Go-owned data. DownloadPackage closes the underlying Nix
+// store path handles before returning this DTO.
+type DownloadedPackageOutput struct {
+	OutputName string   `json:"outputName"`
+	StorePath  string   `json:"storePath"`
+	RealPath   string   `json:"realPath"`
+	Name       string   `json:"name"`
+	Hash       [20]byte `json:"hash"`
+}
+
 // PackageMeta describes the conventional nixpkgs meta attribute set.
 //
 // Many meta fields are intentionally optional because nixpkgs does not require

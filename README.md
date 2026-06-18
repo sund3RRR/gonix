@@ -42,9 +42,9 @@ in progress.
   - [x] Locked flake workflows.
   - [x] Locked output access.
 - [ ] Nix package convenience API.
-  - [ ] Package-shaped value wrappers.
+  - [x] Package metadata projection.
   - [ ] Build/install metadata helpers.
-  - [ ] Store-backed package realization helpers.
+  - [x] Store-backed package realization helpers.
 
 ## License
 

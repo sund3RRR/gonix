@@ -171,6 +171,85 @@ func (c *Client) FetchPackage(locked *flake.LockedFlake, name string, opts ...Fe
 	return pkg, nil
 }
 
+// DownloadPackage fetches a package by name and realizes all of its outputs.
+//
+// DownloadPackage returns pure Go DTOs and closes the Nix store path handles
+// produced while realizing the package before returning. The client store must
+// support realization; callers that need writes should pass a writable store to
+// NewClient with WithClientStore.
+func (c *Client) DownloadPackage(locked *flake.LockedFlake, name string, opts ...DownloadPackageOption) ([]DownloadedPackageOutput, error) {
+	if c.closed {
+		return nil, status.ErrClosed
+	}
+
+	var cfg downloadPackageConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	fetchOpts := make([]FetchPackageOption, 0, 1)
+	if cfg.system != "" {
+		fetchOpts = append(fetchOpts, WithFetchPackageSystem(cfg.system))
+	}
+
+	pkg, err := c.FetchPackage(locked, name, fetchOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("client: download package: fetch package: %w", err)
+	}
+	if pkg.Type != "" && pkg.Type != PackageTypeDerivation {
+		return nil, fmt.Errorf("client: download package: unsupported package type %q", pkg.Type)
+	}
+	if pkg.DrvPath == "" {
+		return nil, fmt.Errorf("client: download package: missing drvPath")
+	}
+
+	drvPath, err := c.store.ParsePath(pkg.DrvPath)
+	if err != nil {
+		return nil, fmt.Errorf("client: download package: parse drv path: %w", err)
+	}
+	defer func() {
+		_ = drvPath.Close()
+	}()
+
+	realizations, err := c.store.Realise(drvPath)
+	if err != nil {
+		return nil, fmt.Errorf("client: download package: realise package: %w", err)
+	}
+	defer func() {
+		for i := range realizations {
+			_ = realizations[i].Close()
+		}
+	}()
+
+	outputs := make([]DownloadedPackageOutput, 0, len(realizations))
+	for i := range realizations {
+		realizedPath := realizations[i].Path
+		if realizedPath == nil {
+			return nil, fmt.Errorf("client: download package: realization %q has nil path", realizations[i].OutputName)
+		}
+
+		storePath, err := c.store.PrintPath(realizedPath)
+		if err != nil {
+			return nil, fmt.Errorf("client: download package: print output path %q: %w", realizations[i].OutputName, err)
+		}
+
+		realPath, err := c.store.RealPath(realizedPath)
+		if err != nil {
+			return nil, fmt.Errorf("client: download package: real output path %q: %w", realizations[i].OutputName, err)
+		}
+
+		outputs = append(outputs, DownloadedPackageOutput{
+			OutputName: realizations[i].OutputName,
+			StorePath:  storePath,
+			RealPath:   realPath,
+			Name:       realizedPath.Name(),
+			Hash:       realizedPath.Hash(),
+		})
+	}
+
+	return outputs, nil
+}
+
 // Close releases resources created through c.
 //
 // Close is idempotent. It does not close the Runtime passed to NewClient.

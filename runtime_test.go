@@ -657,3 +657,81 @@ func TestClientFetchPackage(t *testing.T) {
 		t.Fatalf("src = %#v", pkg.Src)
 	}
 }
+
+func TestClientDownloadPackage(t *testing.T) {
+	r := newFlakeTestRuntime(t)
+	c := newFlakeTestClient(t, r)
+
+	root := realTempDir(t)
+	writeTestFlake(t, root, `
+{
+  outputs = { ... }:
+  let
+    system = builtins.currentSystem;
+  in {
+    legacyPackages.${system} = {
+      demo = derivation {
+        type = "derivation";
+        name = "download-demo";
+        inherit system;
+        builder = "/bin/sh";
+        args = [ "-c" "printf out > $out; printf dev > $dev" ];
+        outputs = [ "out" "dev" ];
+      };
+
+      missingDrvPath = {
+        type = "derivation";
+        name = "missing-drv-path";
+        outputs = [];
+      };
+    };
+  };
+}
+`)
+
+	ref, err := c.ParseFlakeRef(".", flake.WithBaseDirectory(root))
+	if err != nil {
+		t.Fatalf("Client.ParseFlakeRef() error = %v", err)
+	}
+	locked, err := c.LockFlake(ref)
+	if err != nil {
+		t.Fatalf("Client.LockFlake() error = %v", err)
+	}
+
+	outputs, err := c.DownloadPackage(locked, "demo")
+	if err != nil {
+		t.Fatalf("Client.DownloadPackage() error = %v", err)
+	}
+	if len(outputs) != 2 {
+		t.Fatalf("Client.DownloadPackage() output count = %d, want 2: %#v", len(outputs), outputs)
+	}
+
+	byOutputName := make(map[string]DownloadedPackageOutput, len(outputs))
+	for _, output := range outputs {
+		if output.OutputName == "" || output.StorePath == "" || output.RealPath == "" || output.Name == "" {
+			t.Fatalf("downloaded output has empty fields: %#v", output)
+		}
+		if output.Hash == ([20]byte{}) {
+			t.Fatalf("downloaded output has zero hash: %#v", output)
+		}
+		if _, err := os.Stat(output.RealPath); err != nil {
+			t.Fatalf("Stat(%q) error = %v", output.RealPath, err)
+		}
+		byOutputName[output.OutputName] = output
+	}
+	for _, outputName := range []string{"out", "dev"} {
+		if _, ok := byOutputName[outputName]; !ok {
+			t.Fatalf("missing output %q in %#v", outputName, outputs)
+		}
+	}
+
+	if _, err := c.DownloadPackage(locked, "missingDrvPath"); err == nil {
+		t.Fatal("Client.DownloadPackage(missing drvPath) error = nil, want error")
+	}
+
+	if err := c.Close(); err != nil {
+		t.Fatalf("Client.Close() error = %v", err)
+	}
+	_, err = c.DownloadPackage(locked, "demo")
+	requireRuntimeClosedError(t, err)
+}
