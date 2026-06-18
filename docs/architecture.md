@@ -119,7 +119,7 @@ General context settings live on `nixcontext.Context`, not Client:
 | `flakesettings` | `Settings` | Flake settings lifecycle and evaluator integration. |
 | `flake` | `Ref`, `LockedFlake` | Low-level flake parsing, locking, and output access. |
 | `internal/status` | `NixError`, `ErrorCode`, `ErrClosed` | Stable conversion of mutable Nix context errors. |
-| `pkg/utils` | `TakeCString` | Shared generated-binding string adapters. |
+| `pkg/utils` | `TakeCString`, `EncodeNix32` | Shared generated-binding and Nix representation adapters. |
 
 Dependency direction is one-way:
 
@@ -137,7 +137,7 @@ Dependency direction is one-way:
 | `nixcontext.Context` | `*nix.NixCContext` | owned lifetime root | `CContextFree` |
 | `gonix.Client` | composed resources | owns context, settings, store, evaluator, flakes | reverse dependency order |
 | `gonix.Flake` | reference, locked flake, projection value | owned; borrows Client graph | closes projection, lock, reference |
-| `store.Store` | `*nix.Store` | owned; borrows Context | `StoreFree` |
+| `store.Store` | `*nix.Store` plus cached metadata | owned; borrows Context | `StoreFree` |
 | `storepath.Path` | `*nix.StorePath` | owned or cloned | `StorePathFree` |
 | `store.Derivation` | `*nix.NixDerivation` | owned or cloned | `DerivationFree` |
 | `eval.Evaluator` | `*nix.EvalState` | owned; borrows Store and Context | values then `StateFree` |
@@ -190,7 +190,9 @@ flowchart TD
 
 All Close methods are idempotent. Methods depending on a closed owned handle or
 closed Context return `status.ErrClosed` directly or wrapped with operation
-context. Objects are not goroutine-safe unless explicitly documented.
+context. Cached metadata accessors on `store.Store` and `storepath.Path` remain
+available after their raw handles or Context are closed. Objects are not
+goroutine-safe unless explicitly documented.
 
 ## Error handling
 

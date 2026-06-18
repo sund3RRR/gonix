@@ -168,10 +168,7 @@ func (c *Flake) DownloadPackage(pkg Package) ([]DownloadedPackageOutput, error) 
 			return nil, fmt.Errorf("flake: failed to download package: realization %q has nil path", realizations[i].OutputName)
 		}
 
-		storePath, err := c.store.PrintPath(realizedPath)
-		if err != nil {
-			return nil, fmt.Errorf("flake: failed to download package: print output path %q: %w", realizations[i].OutputName, err)
-		}
+		storePath := c.store.PrintPath(realizedPath.Hash(), realizedPath.Name())
 
 		realPath, err := c.store.RealPath(realizedPath)
 		if err != nil {
