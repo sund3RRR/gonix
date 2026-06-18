@@ -36,12 +36,18 @@ func main() {
 	}
 	defer f.Close() //nolint:errcheck
 
+	var packageName string
+	if err := f.Output([]string{"packages", gonix.DefaultSystem(), "hello", "name"}, &packageName); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("flake package name=%s\n", packageName)
+
 	pkg, err := f.FetchPackage("hello", gonix.WithFetchPackageSystem(gonix.DefaultSystem()))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	outputs, err := f.DownloadPackage(pkg)
+	outputs, err := f.RealizePackage(pkg)
 	if err != nil {
 		log.Fatal(err)
 	}

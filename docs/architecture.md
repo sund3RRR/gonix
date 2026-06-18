@@ -40,8 +40,11 @@ defer client.Close()
 f, err := client.NewFlake("github:NixOS/nixpkgs/nixos-unstable")
 defer f.Close()
 
+var name string
+err = f.Output([]string{"packages", gonix.DefaultSystem(), "hello", "name"}, &name)
+
 pkg, err := f.FetchPackage("hello")
-outputs, err := f.DownloadPackage(pkg)
+outputs, err := f.RealizePackage(pkg)
 
 var result int
 err = client.Eval("1 + 2", &result)
@@ -65,6 +68,10 @@ reverse dependency order.
 expression directly into Go data. Advanced callers that need raw values or a
 custom diagnostic path use `eval.Evaluator`.
 
+`Flake.Output` provides the corresponding resource-safe path for decoding any
+locked flake output. Attribute paths are represented as string slices so every
+element names one exact Nix attribute without parsing or escaping rules.
+
 ### Advanced composition
 
 Advanced users create an explicit lifetime root and compose subpackages:
@@ -87,6 +94,11 @@ closed before its Context.
 The root `gonix.NewFlake` constructor is an advanced composition point. Its
 Context, settings, Store, and Evaluator arguments are borrowed, must belong to
 the same object graph, and must outlive the returned Flake.
+
+Lock metadata is not exposed yet. The public libflake C API can return evaluated
+outputs from a locked flake but cannot inspect its resolved reference or lock
+graph. Gonix does not reconstruct that information by re-locking, reading lock
+files, invoking private C++ APIs, or shelling out.
 
 ## Configuration
 
@@ -228,8 +240,10 @@ still be closed after the Evaluator while their Context remains open.
 - `Client.Eval` evaluates and unmarshals an expression without exposing a raw
   Nix value.
 - `gonix.NewFlake` is the explicitly assembled advanced constructor.
+- `Flake.Output(path, out)` traverses and unmarshals exact locked-output
+  attributes.
 - `Flake.FetchPackage(name, opts...)` selects and decodes a package for a
-  system.
-- `Flake.DownloadPackage(pkg)` realizes an already selected package.
-- Package and downloaded output results are Go-owned DTOs.
+  system from `packages.<system>`.
+- `Flake.RealizePackage(pkg)` realizes an already selected package.
+- Package and realized output results are Go-owned DTOs.
 - Low-level parsing and locking remain available through package `flake`.

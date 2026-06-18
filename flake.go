@@ -84,6 +84,70 @@ func NewFlake(
 	return f, nil
 }
 
+// Output decodes a locked flake output selected by path into out.
+//
+// Each path element names one exact Nix attribute; dots have no special
+// meaning. An empty path decodes the complete flake output attribute set. The
+// out argument must be a non-nil pointer to a type supported by
+// eval.Evaluator.Unmarshal.
+func (f *Flake) Output(path []string, out any) (err error) {
+	if f.lock == nil {
+		return status.ErrClosed
+	}
+
+	root, err := f.lock.OutputAttrs()
+	if err != nil {
+		return fmt.Errorf("flake: failed to get output attributes: %w", err)
+	}
+
+	values := []*eval.Value{root}
+	defer func() {
+		closeErrs := make([]error, 0, len(values))
+		for i := len(values) - 1; i >= 0; i-- {
+			if closeErr := values[i].Close(); closeErr != nil {
+				closeErrs = append(closeErrs, closeErr)
+			}
+		}
+		if len(closeErrs) == 0 {
+			return
+		}
+
+		closeErr := fmt.Errorf("flake: failed to close output values: %w", errors.Join(closeErrs...))
+		if err != nil {
+			err = errors.Join(err, closeErr)
+			return
+		}
+		err = closeErr
+	}()
+
+	value := root
+	for _, attr := range path {
+		typ, typeErr := value.Type()
+		if typeErr != nil {
+			return fmt.Errorf("flake: failed to inspect output before attribute %q: %w", attr, typeErr)
+		}
+		if typ != eval.ValueTypeAttrs {
+			return fmt.Errorf(
+				"flake: failed to get output attribute %q: %w",
+				attr,
+				&eval.ValueTypeError{Actual: typ, Expected: eval.ValueTypeAttrs},
+			)
+		}
+
+		value, err = f.evaluator.Attr(value, attr)
+		if err != nil {
+			return fmt.Errorf("flake: failed to get output attribute %q: %w", attr, err)
+		}
+		values = append(values, value)
+	}
+
+	if err := f.evaluator.Unmarshal(value, out); err != nil {
+		return fmt.Errorf("flake: failed to decode output: %w", err)
+	}
+
+	return nil
+}
+
 // FetchPackage fetches a package by name from locked and decodes it.
 func (c *Flake) FetchPackage(name string, opts ...FetchPackageOption) (Package, error) {
 	if c.lock == nil {
@@ -129,32 +193,32 @@ func (c *Flake) FetchPackage(name string, opts ...FetchPackageOption) (Package, 
 	return pkg, nil
 }
 
-// DownloadPackage realizes all outputs of pkg.
+// RealizePackage realizes all outputs of pkg.
 //
-// DownloadPackage returns pure Go DTOs and closes the Nix store path handles
+// RealizePackage returns pure Go DTOs and closes the Nix store path handles
 // produced while realizing the package before returning. The store used to
 // create the Flake must support realization.
-func (c *Flake) DownloadPackage(pkg Package) ([]DownloadedPackageOutput, error) {
+func (c *Flake) RealizePackage(pkg Package) ([]RealizedPackageOutput, error) {
 	if c.lock == nil {
 		return nil, status.ErrClosed
 	}
 
 	if pkg.Type != "" && pkg.Type != PackageTypeDerivation {
-		return nil, fmt.Errorf("flake: failed to download package: unsupported package type %q", pkg.Type)
+		return nil, fmt.Errorf("flake: failed to realize package: unsupported package type %q", pkg.Type)
 	}
 	if pkg.DrvPath == "" {
-		return nil, fmt.Errorf("flake: failed to download package: missing drvPath")
+		return nil, fmt.Errorf("flake: failed to realize package: missing drvPath")
 	}
 
 	drvPath, err := c.store.ParsePath(pkg.DrvPath)
 	if err != nil {
-		return nil, fmt.Errorf("flake: failed to download package: parse drv path: %w", err)
+		return nil, fmt.Errorf("flake: failed to realize package: parse drv path: %w", err)
 	}
 	defer drvPath.Close() //nolint:errcheck
 
 	realizations, err := c.store.Realise(drvPath)
 	if err != nil {
-		return nil, fmt.Errorf("flake: failed to download package: realise package: %w", err)
+		return nil, fmt.Errorf("flake: failed to realize package: realize store path: %w", err)
 	}
 	defer func() {
 		for i := range realizations {
@@ -162,21 +226,21 @@ func (c *Flake) DownloadPackage(pkg Package) ([]DownloadedPackageOutput, error) 
 		}
 	}()
 
-	outputs := make([]DownloadedPackageOutput, 0, len(realizations))
+	outputs := make([]RealizedPackageOutput, 0, len(realizations))
 	for i := range realizations {
 		realizedPath := realizations[i].Path
 		if realizedPath == nil {
-			return nil, fmt.Errorf("flake: failed to download package: realization %q has nil path", realizations[i].OutputName)
+			return nil, fmt.Errorf("flake: failed to realize package: realization %q has nil path", realizations[i].OutputName)
 		}
 
 		storePath := c.store.PrintPath(realizedPath.Hash(), realizedPath.Name())
 
 		realPath, err := c.store.RealPath(realizedPath)
 		if err != nil {
-			return nil, fmt.Errorf("flake: failed to download package: real output path %q: %w", realizations[i].OutputName, err)
+			return nil, fmt.Errorf("flake: failed to realize package: real output path %q: %w", realizations[i].OutputName, err)
 		}
 
-		outputs = append(outputs, DownloadedPackageOutput{
+		outputs = append(outputs, RealizedPackageOutput{
 			OutputName: realizations[i].OutputName,
 			StorePath:  storePath,
 			RealPath:   realPath,

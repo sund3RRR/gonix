@@ -42,9 +42,7 @@ let
         else throw "package not found: ${name}";
 
   packageSet =
-    if hasAttr "legacyPackages" outputs && hasAttr system outputs.legacyPackages
-    then outputs.legacyPackages.${system}
-    else if hasAttr "packages" outputs && hasAttr system outputs.packages
+    if hasAttr "packages" outputs && hasAttr system outputs.packages
     then outputs.packages.${system}
     else throw "flake does not expose packages for system ${system}";
 

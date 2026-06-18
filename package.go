@@ -68,11 +68,11 @@ type PackageOutput struct {
 	OutputName string      `nix:"outputName" json:"outputName" validate:"optional"`
 }
 
-// DownloadedPackageOutput describes one realized package output.
+// RealizedPackageOutput describes one realized package output.
 //
-// It contains only Go-owned data. DownloadPackage closes the underlying Nix
+// It contains only Go-owned data. RealizePackage closes the underlying Nix
 // store path handles before returning this DTO.
-type DownloadedPackageOutput struct {
+type RealizedPackageOutput struct {
 	OutputName string   `json:"outputName"`
 	StorePath  string   `json:"storePath"`
 	RealPath   string   `json:"realPath"`

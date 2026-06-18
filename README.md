@@ -25,7 +25,11 @@ if err != nil {
 }
 defer f.Close()
 
+var name string
+err = f.Output([]string{"packages", gonix.DefaultSystem(), "hello", "name"}, &name)
+
 pkg, err := f.FetchPackage("hello")
+outputs, err := f.RealizePackage(pkg)
 ```
 
 ## Implementation status
@@ -60,7 +64,7 @@ composition.
 - [x] Flakes.
   - [x] Flake reference parsing.
   - [x] Locked flake workflows.
-  - [x] Locked output access.
+  - [x] Generic typed locked-output access.
 - [ ] Nix package convenience API.
   - [x] Package metadata projection.
   - [ ] Build/install metadata helpers.
@@ -103,6 +107,28 @@ It does not currently decode functions, derivations as dedicated Go types,
 string contexts, external values, interfaces or union types, arbitrary map key
 types, or custom decoder implementations. Advanced callers can use the
 lower-level `eval` package to work with caller-owned Nix values directly.
+
+## Flake outputs and packages
+
+`Flake.Output` traverses the output attributes of the locked flake and decodes
+the selected value into Go data:
+
+```go
+var packageName string
+err := f.Output(
+	[]string{"packages", gonix.DefaultSystem(), "hello", "name"},
+	&packageName,
+)
+```
+
+Each path element is one exact attribute name, so an attribute containing a dot
+is addressed as a single slice element. An empty path decodes the complete
+flake output attribute set.
+
+`FetchPackage` is the normalized package convenience API for
+`packages.<system>` outputs. It intentionally does not fall back to
+`legacyPackages`. `RealizePackage` builds or substitutes the selected package
+and returns Go-owned `RealizedPackageOutput` values.
 
 ## License
 
