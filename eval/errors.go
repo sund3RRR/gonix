@@ -5,6 +5,19 @@ import (
 	"reflect"
 )
 
+// ValueTypeError describes a Value getter called for the wrong Nix type.
+type ValueTypeError struct {
+	// Actual is the value's runtime Nix type.
+	Actual ValueType
+
+	// Expected is the Nix type required by the getter.
+	Expected ValueType
+}
+
+func (e *ValueTypeError) Error() string {
+	return fmt.Sprintf("eval: cannot read %s value as %s", e.Actual, e.Expected)
+}
+
 // InvalidUnmarshalError describes an invalid target passed to Evaluator.Unmarshal.
 type InvalidUnmarshalError struct {
 	Type reflect.Type

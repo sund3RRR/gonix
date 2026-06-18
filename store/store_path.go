@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
@@ -8,6 +9,9 @@ import (
 	"github.com/sund3RRR/gonix/storepath"
 	nix "github.com/sund3RRR/nix-go-bindings"
 )
+
+// ErrPathNotFound reports that a store has no path matching a hash part.
+var ErrPathNotFound = errors.New("store path not found")
 
 // URI returns the store's canonical URI.
 //
@@ -111,8 +115,8 @@ func (s *Store) PrintPath(path *storepath.Path) (string, error) {
 // PathFromHash returns the store path whose hash part matches hashPart.
 //
 // hashPart is the encoded hash portion of a Nix store path, without the store
-// directory or name. If the store has no matching path, Nix reports an error.
-// The returned path is owned by the caller.
+// directory or name. If the store has no matching path, PathFromHash returns
+// ErrPathNotFound. The returned path is owned by the caller.
 func (s *Store) PathFromHash(hashPart []byte) (*storepath.Path, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed
@@ -125,7 +129,7 @@ func (s *Store) PathFromHash(hashPart []byte) (*storepath.Path, error) {
 
 	ptr := nix.StoreQueryPathFromHashPart(rawCtx, s.ptr, string(hashPart))
 	if ptr == nil {
-		return nil, fmt.Errorf("store: failed to get path from hash: %w", status.FromContext(rawCtx))
+		return nil, pathFromHashError(rawCtx, hashPart)
 	}
 
 	path, err := storepath.New(s.ctx, ptr)
@@ -135,6 +139,13 @@ func (s *Store) PathFromHash(hashPart []byte) (*storepath.Path, error) {
 	}
 
 	return path, nil
+}
+
+func pathFromHashError(rawCtx *nix.NixCContext, hashPart []byte) error {
+	if err := status.FromContext(rawCtx); err != nil {
+		return fmt.Errorf("store: failed to get path from hash: %w", err)
+	}
+	return fmt.Errorf("store: hash %q: %w", hashPart, ErrPathNotFound)
 }
 
 // RealPath returns the concrete filesystem path for path in this store.

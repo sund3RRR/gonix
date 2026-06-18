@@ -168,6 +168,44 @@ func TestEvaluatorInvalidExpression(t *testing.T) {
 	}
 }
 
+func TestValueGettersRejectWrongType(t *testing.T) {
+	_, e := newTestEvaluator(t)
+
+	value, err := e.EvalString("42", ".")
+	if err != nil {
+		t.Fatalf("Evaluator.EvalString() error = %v", err)
+	}
+	if err := e.Force(value); err != nil {
+		t.Fatalf("Evaluator.Force() error = %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		expected eval.ValueType
+		call     func() error
+	}{
+		{name: "bool", expected: eval.ValueTypeBool, call: func() error { _, err := value.Bool(); return err }},
+		{name: "float", expected: eval.ValueTypeFloat, call: func() error { _, err := value.Float(); return err }},
+		{name: "string", expected: eval.ValueTypeString, call: func() error { _, err := value.String(); return err }},
+		{name: "path", expected: eval.ValueTypePath, call: func() error { _, err := value.PathString(); return err }},
+		{name: "list", expected: eval.ValueTypeList, call: func() error { _, err := value.ListLen(); return err }},
+		{name: "attrs", expected: eval.ValueTypeAttrs, call: func() error { _, err := value.AttrLen(); return err }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.call()
+			var typeErr *eval.ValueTypeError
+			if !errors.As(err, &typeErr) {
+				t.Fatalf("getter error = %v, want ValueTypeError", err)
+			}
+			if typeErr.Actual != eval.ValueTypeInt || typeErr.Expected != tt.expected {
+				t.Fatalf("ValueTypeError = %#v, want actual int and expected %s", typeErr, tt.expected)
+			}
+		})
+	}
+}
+
 func TestEvaluatorForceDeepCallAndCallMulti(t *testing.T) {
 	_, e := newTestEvaluator(t)
 

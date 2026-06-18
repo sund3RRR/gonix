@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -280,6 +281,19 @@ func TestStore_PathFromHash(t *testing.T) {
 				}
 			})
 		})
+	}
+}
+
+func TestPathFromHashErrorWithoutContextError(t *testing.T) {
+	ctx := newStoreTestContext(t)
+	rawCtx, err := ctx.Borrow()
+	if err != nil {
+		t.Fatalf("Context.Borrow() error = %v", err)
+	}
+
+	err = pathFromHashError(rawCtx, []byte(testZeroHashPart))
+	if !errors.Is(err, ErrPathNotFound) {
+		t.Fatalf("pathFromHashError() error = %v, want ErrPathNotFound", err)
 	}
 }
 

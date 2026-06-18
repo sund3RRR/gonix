@@ -73,11 +73,8 @@ func NewParsedRef(
 	defer nix.FlakeReferenceResultFree(result)
 
 	ptr := nix.FlakeReferenceResultTakeReference(result)
-	if ptr == nil {
-		return nil, fmt.Errorf("flake: failed to take parsed reference: %w", status.FromContext(rawCtx))
-	}
-
 	fragment := utils.TakeCString(nix.FlakeReferenceResultTakeFragment(result))
+
 	return &Ref{
 		ctx:      ctx,
 		ptr:      ptr,

@@ -129,6 +129,9 @@ func (v *Value) Bool() (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
+	if err := v.requireType(rawCtx, ValueTypeBool); err != nil {
+		return false, err
+	}
 
 	got := nix.GetBool(rawCtx, v.ptr)
 	if err := status.FromContext(rawCtx); err != nil {
@@ -147,6 +150,9 @@ func (v *Value) Int() (int64, error) {
 	rawCtx, err := v.ctx.Borrow()
 	if err != nil {
 		return 0, fmt.Errorf("eval: failed to borrow context: %w", err)
+	}
+	if err := v.requireType(rawCtx, ValueTypeInt); err != nil {
+		return 0, err
 	}
 
 	got := nix.GetInt(rawCtx, v.ptr)
@@ -167,6 +173,9 @@ func (v *Value) Float() (float64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
+	if err := v.requireType(rawCtx, ValueTypeFloat); err != nil {
+		return 0, err
+	}
 
 	got := nix.GetFloat(rawCtx, v.ptr)
 	if err := status.FromContext(rawCtx); err != nil {
@@ -185,6 +194,9 @@ func (v *Value) String() (string, error) {
 	rawCtx, err := v.ctx.Borrow()
 	if err != nil {
 		return "", fmt.Errorf("eval: failed to borrow context: %w", err)
+	}
+	if err := v.requireType(rawCtx, ValueTypeString); err != nil {
+		return "", err
 	}
 
 	ptr := nix.GetString(rawCtx, v.ptr)
@@ -205,6 +217,9 @@ func (v *Value) PathString() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
+	if err := v.requireType(rawCtx, ValueTypePath); err != nil {
+		return "", err
+	}
 
 	ptr := nix.GetPathString(rawCtx, v.ptr)
 	if ptr == nil {
@@ -224,6 +239,9 @@ func (v *Value) ListLen() (uint32, error) {
 	if err != nil {
 		return 0, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
+	if err := v.requireType(rawCtx, ValueTypeList); err != nil {
+		return 0, err
+	}
 
 	got := nix.GetListSize(rawCtx, v.ptr)
 	if err := status.FromContext(rawCtx); err != nil {
@@ -242,6 +260,9 @@ func (v *Value) AttrLen() (uint32, error) {
 	rawCtx, err := v.ctx.Borrow()
 	if err != nil {
 		return 0, fmt.Errorf("eval: failed to borrow context: %w", err)
+	}
+	if err := v.requireType(rawCtx, ValueTypeAttrs); err != nil {
+		return 0, err
 	}
 
 	got := nix.GetAttrsSize(rawCtx, v.ptr)
@@ -285,6 +306,18 @@ func (v *Value) Close() error {
 
 	if code := nix.ValueDecref(rawCtx, v.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 		return fmt.Errorf("eval: failed to decref value: %w", status.FromContext(rawCtx))
+	}
+
+	return nil
+}
+
+func (v *Value) requireType(rawCtx *nix.NixCContext, expected ValueType) error {
+	actual := ValueType(nix.GetType(rawCtx, v.ptr))
+	if err := status.FromContext(rawCtx); err != nil {
+		return fmt.Errorf("eval: failed to get value type: %w", err)
+	}
+	if actual != expected {
+		return &ValueTypeError{Actual: actual, Expected: expected}
 	}
 
 	return nil
