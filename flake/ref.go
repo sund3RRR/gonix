@@ -99,9 +99,6 @@ func (r *Ref) Borrow() (*nix.NixFlakeReference, error) {
 	if r.ptr == nil {
 		return nil, status.ErrClosed
 	}
-	if _, err := r.ctx.Borrow(); err != nil {
-		return nil, err
-	}
 
 	return r.ptr, nil
 }

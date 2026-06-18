@@ -19,17 +19,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer func() {
-		_ = client.Close()
-	}()
+	defer client.Close() //nolint:errcheck
 
 	f, err := client.NewFlake("github:NixOS/nixpkgs/nixos-unstable")
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer func() {
-		_ = f.Close()
-	}()
+	defer f.Close() //nolint:errcheck
 
 	pkg, err := f.FetchPackage("hello", gonix.WithFetchPackageSystem(gonix.DefaultSystem()))
 	if err != nil {

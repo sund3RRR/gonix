@@ -194,7 +194,7 @@ func (c *Flake) DownloadPackage(pkg Package) ([]DownloadedPackageOutput, error) 
 //
 // Close is idempotent and also cleans up a partially initialized Flake.
 func (f *Flake) Close() error {
-	if f == nil || f.lock == nil {
+	if f == nil || (f.parsedRef == nil && f.lock == nil) {
 		return nil
 	}
 
