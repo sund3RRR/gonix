@@ -42,6 +42,9 @@ defer f.Close()
 
 pkg, err := f.FetchPackage("hello")
 outputs, err := f.DownloadPackage(pkg)
+
+var result int
+err = client.Eval("1 + 2", &result)
 ```
 
 `ClientConfig{}` is flake-ready. It preserves Nix defaults while enabling
@@ -57,6 +60,10 @@ Client owns:
 Every Flake returned by `Client.NewFlake` is caller-owned and must be closed
 before the Client. Client closes its evaluator, store, settings, and context in
 reverse dependency order.
+
+`Client.Eval` is the resource-safe convenience path for evaluating a Nix
+expression directly into Go data. Advanced callers that need raw values or a
+custom diagnostic path use `eval.Evaluator`.
 
 ### Advanced composition
 
@@ -218,6 +225,8 @@ still be closed after the Evaluator while their Context remains open.
 ## Public workflow boundaries
 
 - `Client.NewFlake` is the ordinary caller-owned constructor.
+- `Client.Eval` evaluates and unmarshals an expression without exposing a raw
+  Nix value.
 - `gonix.NewFlake` is the explicitly assembled advanced constructor.
 - `Flake.FetchPackage(name, opts...)` selects and decodes a package for a
   system.

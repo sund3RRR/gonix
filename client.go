@@ -99,6 +99,38 @@ func (c *Client) NewFlake(ref string, opts ...FlakeOption) (*Flake, error) {
 	return f, nil
 }
 
+// Eval evaluates expr and decodes its result into out.
+//
+// The out argument must be a non-nil pointer to a type supported by
+// eval.Evaluator.Unmarshal. Use the eval package directly when the raw
+// caller-owned Value or a custom diagnostic path is needed.
+func (c *Client) Eval(expr string, out any) (err error) {
+	if c == nil || c.ctx == nil {
+		return status.ErrClosed
+	}
+
+	value, err := c.evaluator.EvalString(expr, "<gonix>")
+	if err != nil {
+		return fmt.Errorf("client: failed to evaluate expression: %w", err)
+	}
+	defer func() {
+		if closeErr := value.Close(); closeErr != nil {
+			closeErr = fmt.Errorf("client: failed to close evaluated value: %w", closeErr)
+			if err != nil {
+				err = errors.Join(err, closeErr)
+				return
+			}
+			err = closeErr
+		}
+	}()
+
+	if err := c.evaluator.Unmarshal(value, out); err != nil {
+		return fmt.Errorf("client: failed to decode expression result: %w", err)
+	}
+
+	return nil
+}
+
 // Close releases the evaluator, store, settings, and context.
 //
 // Close is idempotent. It attempts every cleanup and joins multiple errors.

@@ -21,6 +21,15 @@ func main() {
 	}
 	defer client.Close() //nolint:errcheck
 
+	var evaluation struct {
+		Message string `nix:"message" validate:"required"`
+		Answer  int    `nix:"answer" validate:"required"`
+	}
+	if err := client.Eval(`{ message = "hello from Nix"; answer = 6 * 7; }`, &evaluation); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("evaluation=%+v\n", evaluation)
+
 	f, err := client.NewFlake("github:NixOS/nixpkgs/nixos-unstable")
 	if err != nil {
 		log.Fatal(err)

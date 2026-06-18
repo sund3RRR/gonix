@@ -52,6 +52,7 @@ composition.
   - [x] Evaluation state API.
   - [x] Nix value API.
   - [x] Value forcing, traversal, calls, and conversion helpers.
+  - [x] High-level `Client.Eval` evaluation and unmarshalling.
 - [ ] Fetchers.
   - [x] Fetcher settings lifecycle.
   - [ ] Fetch tree and input resolution helpers.
@@ -64,6 +65,44 @@ composition.
   - [x] Package metadata projection.
   - [ ] Build/install metadata helpers.
   - [x] Store-backed package realization helpers.
+
+## Evaluation and unmarshalling
+
+`Client.Eval` runs expressions through the real Nix evaluator and decodes the
+result directly into Go data:
+
+```go
+var result struct {
+	Message string         `nix:"message" validate:"required"`
+	Ports   []int          `nix:"ports" validate:"required"`
+	Flags   map[string]bool `nix:"flags" validate:"required"`
+}
+
+err := client.Eval(`{
+  message = "hello from Nix";
+  ports = [ 80 443 ];
+  flags = { tls = true; };
+}`, &result)
+```
+
+Evaluation supports ordinary Nix language semantics, including functions,
+imports, laziness, builtins, conditionals, attribute sets, and lists, subject
+to the configured evaluator and enabled Nix features.
+
+The unmarshaller currently supports:
+
+- strings and paths into Go strings;
+- integers, floats, and booleans;
+- `null` into nil pointers;
+- lists into slices and fixed-length arrays;
+- attribute sets into structs and maps with string keys;
+- nested combinations of supported values;
+- `nix` field names and `validate:"required"` fields.
+
+It does not currently decode functions, derivations as dedicated Go types,
+string contexts, external values, interfaces or union types, arbitrary map key
+types, or custom decoder implementations. Advanced callers can use the
+lower-level `eval` package to work with caller-owned Nix values directly.
 
 ## License
 
