@@ -28,6 +28,7 @@ defer f.Close()
 var name string
 err = f.Output([]string{"packages", gonix.DefaultSystem(), "hello", "name"}, &name)
 
+packages, err := f.ListPackages()
 pkg, err := f.FetchPackage("hello")
 outputs, err := f.RealizePackage(pkg)
 ```
@@ -66,6 +67,7 @@ composition.
   - [x] Locked flake workflows.
   - [x] Generic typed locked-output access.
 - [ ] Nix package convenience API.
+  - [x] Fast top-level package listing.
   - [x] Package metadata projection.
   - [ ] Build/install metadata helpers.
   - [x] Store-backed package realization helpers.
@@ -124,6 +126,19 @@ err := f.Output(
 Each path element is one exact attribute name, so an attribute containing a dot
 is addressed as a single slice element. An empty path decodes the complete
 flake output attribute set.
+
+`ListPackages` returns sorted top-level names from `packages.<system>` without
+forcing or decoding the individual package values:
+
+```go
+packages, err := f.ListPackages()
+packages, err = f.ListPackages(gonix.WithListPackagesSystem("aarch64-linux"))
+```
+
+The default system is the flake evaluator's `builtins.currentSystem`, cached
+when the Flake is constructed. Missing `packages` or system attributes produce
+an empty result. Listing is intentionally shallow: nested package sets appear
+as one top-level `PackageRef`.
 
 `FetchPackage` is the normalized package convenience API for
 `packages.<system>` outputs. It intentionally does not fall back to

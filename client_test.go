@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/sund3RRR/gonix/eval"
@@ -305,6 +306,185 @@ func TestFlakePackageAPIs(t *testing.T) {
 	})
 }
 
+func TestFlakeListPackages(t *testing.T) {
+	t.Run("sorted names without forcing values", func(t *testing.T) {
+		client, err := NewClient(ClientConfig{})
+		if err != nil {
+			t.Fatalf("NewClient() error = %v", err)
+		}
+		t.Cleanup(func() { _ = client.Close() })
+
+		f, err := client.NewFlake(writePackageFlake(t))
+		if err != nil {
+			t.Fatalf("Client.NewFlake() error = %v", err)
+		}
+		t.Cleanup(func() { _ = f.Close() })
+
+		want := []PackageRef{
+			{Name: "Z", System: DefaultSystem()},
+			{Name: "a-b", System: DefaultSystem()},
+			{Name: "demo", System: DefaultSystem()},
+			{Name: "dotted.name", System: DefaultSystem()},
+			{Name: "nested", System: DefaultSystem()},
+		}
+
+		for i := range 25 {
+			got, err := f.ListPackages()
+			if err != nil {
+				t.Fatalf("Flake.ListPackages() call %d error = %v", i, err)
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("Flake.ListPackages() call %d = %#v, want %#v", i, got, want)
+			}
+		}
+	})
+
+	t.Run("missing packages", func(t *testing.T) {
+		client, err := NewClient(ClientConfig{})
+		if err != nil {
+			t.Fatalf("NewClient() error = %v", err)
+		}
+		t.Cleanup(func() { _ = client.Close() })
+
+		f, err := client.NewFlake(writeLegacyPackageFlake(t))
+		if err != nil {
+			t.Fatalf("Client.NewFlake() error = %v", err)
+		}
+		t.Cleanup(func() { _ = f.Close() })
+
+		got, err := f.ListPackages()
+		if err != nil {
+			t.Fatalf("Flake.ListPackages() error = %v", err)
+		}
+		if got == nil || len(got) != 0 {
+			t.Fatalf("Flake.ListPackages() = %#v, want non-nil empty result", got)
+		}
+	})
+
+	t.Run("missing system", func(t *testing.T) {
+		client, err := NewClient(ClientConfig{})
+		if err != nil {
+			t.Fatalf("NewClient() error = %v", err)
+		}
+		t.Cleanup(func() { _ = client.Close() })
+
+		f, err := client.NewFlake(writePackageFlake(t))
+		if err != nil {
+			t.Fatalf("Client.NewFlake() error = %v", err)
+		}
+		t.Cleanup(func() { _ = f.Close() })
+
+		got, err := f.ListPackages(WithListPackagesSystem("missing-system"))
+		if err != nil {
+			t.Fatalf("Flake.ListPackages(missing system) error = %v", err)
+		}
+		if got == nil || len(got) != 0 {
+			t.Fatalf("Flake.ListPackages(missing system) = %#v, want non-nil empty result", got)
+		}
+	})
+
+	t.Run("invalid containers", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			contents string
+		}{
+			{
+				name:     "packages",
+				contents: `{ outputs = { self }: { packages = 1; }; }`,
+			},
+			{
+				name: "system",
+				contents: fmt.Sprintf(
+					`{ outputs = { self }: { packages.%q = 1; }; }`,
+					DefaultSystem(),
+				),
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				client, err := NewClient(ClientConfig{})
+				if err != nil {
+					t.Fatalf("NewClient() error = %v", err)
+				}
+				t.Cleanup(func() { _ = client.Close() })
+
+				f, err := client.NewFlake(writeFlake(t, tt.contents))
+				if err != nil {
+					t.Fatalf("Client.NewFlake() error = %v", err)
+				}
+				t.Cleanup(func() { _ = f.Close() })
+
+				_, err = f.ListPackages()
+				var typeErr *eval.ValueTypeError
+				if !errors.As(err, &typeErr) {
+					t.Fatalf("Flake.ListPackages() error = %v, want ValueTypeError", err)
+				}
+			})
+		}
+	})
+
+	t.Run("system resolution", func(t *testing.T) {
+		tests := []struct {
+			system string
+			opts   []ListPackagesOption
+		}{
+			{
+				system: "explicit-system",
+				opts:   []ListPackagesOption{WithListPackagesSystem("explicit-system")},
+			},
+			{
+				system: DefaultSystem(),
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.system, func(t *testing.T) {
+				client, err := NewClient(ClientConfig{})
+				if err != nil {
+					t.Fatalf("NewClient() error = %v", err)
+				}
+				t.Cleanup(func() { _ = client.Close() })
+
+				f, err := client.NewFlake(writePackageNamesFlake(t, tt.system))
+				if err != nil {
+					t.Fatalf("Client.NewFlake() error = %v", err)
+				}
+				t.Cleanup(func() { _ = f.Close() })
+
+				got, err := f.ListPackages(tt.opts...)
+				if err != nil {
+					t.Fatalf("Flake.ListPackages() error = %v", err)
+				}
+				want := []PackageRef{{Name: "demo", System: tt.system}}
+				if !reflect.DeepEqual(got, want) {
+					t.Fatalf("Flake.ListPackages() = %#v, want %#v", got, want)
+				}
+			})
+		}
+	})
+
+	t.Run("closed resources", func(t *testing.T) {
+		client, err := NewClient(ClientConfig{})
+		if err != nil {
+			t.Fatalf("NewClient() error = %v", err)
+		}
+		t.Cleanup(func() { _ = client.Close() })
+
+		f, err := client.NewFlake(writePackageFlake(t))
+		if err != nil {
+			t.Fatalf("Client.NewFlake() error = %v", err)
+		}
+
+		if err := f.Close(); err != nil {
+			t.Fatalf("Flake.Close() error = %v", err)
+		}
+		if _, err := f.ListPackages(); !errors.Is(err, ErrClosed) {
+			t.Fatalf("Flake.ListPackages() after Close error = %v, want ErrClosed", err)
+		}
+	})
+}
+
 func TestFlakePartialCleanup(t *testing.T) {
 	client, err := NewClient(ClientConfig{})
 	if err != nil {
@@ -366,25 +546,32 @@ func writePackageFlake(t *testing.T) string {
       items = [ "a" "b" ];
       "dotted.name" = "exact";
     };
-    packages.%q.demo = rec {
-      type = "derivation";
-      name = "demo-1.0";
-      pname = "demo";
-      version = "1.0";
-      system = %q;
-      drvPath = "/nix/store/00000000000000000000000000000000-demo.drv";
-      outPath = "/nix/store/11111111111111111111111111111111-demo";
-      outputName = "out";
-      outputs = [ "out" ];
-      out = {
-        inherit type name drvPath;
+    packages.%q = {
+      demo = rec {
+        type = "derivation";
+        name = "demo-1.0";
+        pname = "demo";
+        version = "1.0";
+        system = %q;
+        drvPath = "/nix/store/00000000000000000000000000000000-demo.drv";
         outPath = "/nix/store/11111111111111111111111111111111-demo";
         outputName = "out";
+        outputs = [ "out" ];
+        out = {
+          inherit type name drvPath;
+          outPath = "/nix/store/11111111111111111111111111111111-demo";
+          outputName = "out";
+        };
       };
+      Z = throw "Z package must stay lazy";
+      "a-b" = throw "a-b package must stay lazy";
+      "dotted.name" = throw "dotted package must stay lazy";
+      nested = { child = throw "nested package must stay lazy"; };
     };
+    legacyPackages.%q.legacy-only = throw "legacyPackages must not be inspected";
   };
 }
-`, DefaultSystem(), DefaultSystem())
+`, DefaultSystem(), DefaultSystem(), DefaultSystem())
 	if err := os.WriteFile(filepath.Join(dir, "flake.nix"), []byte(contents), 0o644); err != nil {
 		t.Fatalf("write flake.nix: %v", err)
 	}
@@ -419,4 +606,30 @@ func writeLegacyPackageFlake(t *testing.T) string {
 	}
 
 	return "path:" + filepath.ToSlash(dir)
+}
+
+func writePackageNamesFlake(t *testing.T, system string) string {
+	t.Helper()
+
+	return writeFlake(t, fmt.Sprintf(`{
+  outputs = { self }: {
+    packages.%q.demo = throw "package must stay lazy";
+  };
+}
+`, system))
+}
+
+func writeFlake(t *testing.T, contents string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	resolvedDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatalf("resolve flake directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(resolvedDir, "flake.nix"), []byte(contents), 0o644); err != nil {
+		t.Fatalf("write flake.nix: %v", err)
+	}
+
+	return "path:" + filepath.ToSlash(resolvedDir)
 }

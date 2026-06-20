@@ -353,6 +353,38 @@ func TestEvaluatorListAndAttrs(t *testing.T) {
 	}
 }
 
+func TestEvaluatorAttrLazy(t *testing.T) {
+	_, e := newTestEvaluator(t)
+
+	attrs, err := e.EvalString(`{ lazy = throw "must not be forced"; }`, ".")
+	if err != nil {
+		t.Fatalf("Evaluator.EvalString() error = %v", err)
+	}
+	closeValueAtCleanup(t, attrs)
+
+	lazy, err := e.AttrLazy(attrs, "lazy")
+	if err != nil {
+		t.Fatalf("Evaluator.AttrLazy() error = %v", err)
+	}
+	closeValueAtCleanup(t, lazy)
+
+	if err := e.Force(lazy); err == nil {
+		t.Fatal("Evaluator.Force(lazy) error = nil, want thrown value error")
+	}
+
+	scalar, err := e.NewValue(eval.Int(1))
+	if err != nil {
+		t.Fatalf("Evaluator.NewValue() error = %v", err)
+	}
+	closeValueAtCleanup(t, scalar)
+
+	_, err = e.AttrLazy(scalar, "child")
+	var typeErr *eval.ValueTypeError
+	if !errors.As(err, &typeErr) {
+		t.Fatalf("Evaluator.AttrLazy(non-attrs) error = %v, want ValueTypeError", err)
+	}
+}
+
 func TestEvaluatorNewValueBuilders(t *testing.T) {
 	_, e := newTestEvaluator(t)
 

@@ -10,10 +10,10 @@ import (
 
 func main() {
 	client, err := gonix.NewClient(gonix.ClientConfig{
-		Verbosity: gonix.VerbosityWarn,
-		LogFormat: gonix.LogFormatRaw,
+		Verbosity: gonix.VerbosityInfo,
+		LogFormat: gonix.LogFormatBar,
 		Store: gonix.StoreConfig{
-			URI: store.Auto,
+			URI: store.Daemon,
 		},
 	})
 	if err != nil {
@@ -30,27 +30,38 @@ func main() {
 	}
 	fmt.Printf("evaluation=%+v\n", evaluation)
 
-	f, err := client.NewFlake("github:NixOS/nixpkgs/nixos-unstable")
+	f, err := client.NewFlake("github:sund3RRR/tuxedo-nixos")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer f.Close() //nolint:errcheck
 
-	var packageName string
-	if err := f.Output([]string{"packages", gonix.DefaultSystem(), "hello", "name"}, &packageName); err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("flake package name=%s\n", packageName)
+	system := gonix.MakeSystem(gonix.OSLinux, gonix.ArchX86_64)
 
-	pkg, err := f.FetchPackage("hello", gonix.WithFetchPackageSystem(gonix.DefaultSystem()))
+	packages, err := f.ListPackages(gonix.WithListPackagesSystem(system))
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Printf("flake exposes %d top-level packages for %s: %+v\n", len(packages), system, packages)
+
+	packageAttr := "default"
+
+	var packageName string
+	if err := f.Output([]string{"packages", system, packageAttr, "name"}, &packageName); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("flake package %s has name=%s\n", packageAttr, packageName)
+
+	pkg, err := f.FetchPackage(packageAttr, gonix.WithFetchPackageSystem(system))
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("package=%s version=%s\n", pkg.Name, pkg.Version)
 
 	outputs, err := f.RealizePackage(pkg)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("package=%s version=%s outputs=%+v\n", pkg.Name, pkg.Version, outputs)
+	fmt.Printf("realized outputs=%+v\n", outputs)
 }

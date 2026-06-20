@@ -3,6 +3,7 @@ package gonix
 import (
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/sund3RRR/gonix/eval"
 	"github.com/sund3RRR/gonix/fetchers"
@@ -25,6 +26,7 @@ type Flake struct {
 	parsedRef         *flake.Ref
 	lock              *flake.LockedFlake
 	packageProjection *eval.Value
+	defaultSystem     string
 	store             *store.Store
 	evaluator         *eval.Evaluator
 }
@@ -79,6 +81,11 @@ func NewFlake(
 	f.packageProjection, err = e.EvalString(string(projection), packageProjectionPath)
 	if err != nil {
 		return nil, fmt.Errorf("flake: failed to evaluate package projection: %w", err)
+	}
+
+	f.defaultSystem, err = currentSystem(e)
+	if err != nil {
+		return nil, fmt.Errorf("flake: failed to get current system: %w", err)
 	}
 
 	return f, nil
@@ -145,6 +152,158 @@ func (f *Flake) Output(path []string, out any) (err error) {
 		return fmt.Errorf("flake: failed to decode output: %w", err)
 	}
 
+	return nil
+}
+
+// ListPackages returns sorted top-level package references for one flake system.
+//
+// ListPackages enumerates names from packages.<system> without forcing or
+// decoding individual package values. Missing packages or system attributes
+// produce an empty result.
+func (f *Flake) ListPackages(opts ...ListPackagesOption) (refs []PackageRef, err error) {
+	if f == nil || f.lock == nil {
+		return nil, status.ErrClosed
+	}
+
+	var cfg listPackagesConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	system := f.packageSystem(cfg.system)
+
+	root, err := f.lock.OutputAttrs()
+	if err != nil {
+		return nil, fmt.Errorf("flake: failed to list packages: get output attributes: %w", err)
+	}
+
+	values := []*eval.Value{root}
+	defer func() {
+		closeErrs := make([]error, 0, len(values))
+		for i := len(values) - 1; i >= 0; i-- {
+			if closeErr := values[i].Close(); closeErr != nil {
+				closeErrs = append(closeErrs, closeErr)
+			}
+		}
+		if len(closeErrs) == 0 {
+			return
+		}
+
+		closeErr := fmt.Errorf("flake: failed to list packages: close values: %w", errors.Join(closeErrs...))
+		if err != nil {
+			err = errors.Join(err, closeErr)
+			return
+		}
+		err = closeErr
+	}()
+
+	if err := f.requireAttrs(root, "outputs"); err != nil {
+		return nil, err
+	}
+	hasPackages, err := f.evaluator.HasAttr(root, "packages")
+	if err != nil {
+		return nil, fmt.Errorf("flake: failed to list packages: check packages output: %w", err)
+	}
+	if !hasPackages {
+		return []PackageRef{}, nil
+	}
+
+	packages, err := f.evaluator.AttrLazy(root, "packages")
+	if err != nil {
+		return nil, fmt.Errorf("flake: failed to list packages: get packages output: %w", err)
+	}
+	values = append(values, packages)
+	if err := f.requireAttrs(packages, "packages"); err != nil {
+		return nil, err
+	}
+
+	hasSystem, err := f.evaluator.HasAttr(packages, system)
+	if err != nil {
+		return nil, fmt.Errorf("flake: failed to list packages: check system %q: %w", system, err)
+	}
+	if !hasSystem {
+		return []PackageRef{}, nil
+	}
+
+	systemPackages, err := f.evaluator.AttrLazy(packages, system)
+	if err != nil {
+		return nil, fmt.Errorf("flake: failed to list packages: get system %q: %w", system, err)
+	}
+	values = append(values, systemPackages)
+	if err := f.requireAttrs(systemPackages, fmt.Sprintf("packages.%s", system)); err != nil {
+		return nil, err
+	}
+
+	count, err := systemPackages.AttrLen()
+	if err != nil {
+		return nil, fmt.Errorf("flake: failed to list packages: get package count: %w", err)
+	}
+
+	names := make([]string, count)
+	for i := range count {
+		names[i], err = f.evaluator.AttrName(systemPackages, i)
+		if err != nil {
+			return nil, fmt.Errorf("flake: failed to list packages: get package name %d: %w", i, err)
+		}
+	}
+	sort.Strings(names)
+
+	refs = make([]PackageRef, len(names))
+	for i, name := range names {
+		refs[i] = PackageRef{Name: name, System: system}
+	}
+	return refs, nil
+}
+
+func (f *Flake) packageSystem(explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+
+	return f.defaultSystem
+}
+
+func currentSystem(e *eval.Evaluator) (system string, err error) {
+	value, err := e.EvalString("builtins.currentSystem", "<gonix/current-system>")
+	if err != nil {
+		return "", fmt.Errorf("evaluate builtins.currentSystem: %w", err)
+	}
+	defer func() {
+		if closeErr := value.Close(); closeErr != nil {
+			closeErr = fmt.Errorf("close current-system value: %w", closeErr)
+			if err != nil {
+				err = errors.Join(err, closeErr)
+				return
+			}
+			err = closeErr
+		}
+	}()
+
+	if err = e.Force(value); err != nil {
+		return "", fmt.Errorf("force builtins.currentSystem: %w", err)
+	}
+	system, err = value.String()
+	if err != nil {
+		return "", fmt.Errorf("decode builtins.currentSystem: %w", err)
+	}
+	return system, nil
+}
+
+func (f *Flake) requireAttrs(value *eval.Value, name string) error {
+	if err := f.evaluator.Force(value); err != nil {
+		return fmt.Errorf("flake: failed to list packages: force %s: %w", name, err)
+	}
+	typ, err := value.Type()
+	if err != nil {
+		return fmt.Errorf("flake: failed to list packages: get %s type: %w", name, err)
+	}
+	if typ != eval.ValueTypeAttrs {
+		return fmt.Errorf(
+			"flake: failed to list packages: %s: %w",
+			name,
+			&eval.ValueTypeError{Actual: typ, Expected: eval.ValueTypeAttrs},
+		)
+	}
 	return nil
 }
 

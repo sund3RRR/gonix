@@ -16,6 +16,20 @@ func WithFetchPackageSystem(system string) FetchPackageOption {
 	}
 }
 
+// ListPackagesOption configures ListPackages.
+type ListPackagesOption func(*listPackagesConfig)
+
+type listPackagesConfig struct {
+	system string
+}
+
+// WithListPackagesSystem overrides the package system for one ListPackages call.
+func WithListPackagesSystem(system string) ListPackagesOption {
+	return func(c *listPackagesConfig) {
+		c.system = system
+	}
+}
+
 type flakeConfig struct {
 	parseOpts []flake.ParseOption
 	lockOpts  []flake.LockOption

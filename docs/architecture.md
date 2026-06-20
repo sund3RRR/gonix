@@ -43,6 +43,7 @@ defer f.Close()
 var name string
 err = f.Output([]string{"packages", gonix.DefaultSystem(), "hello", "name"}, &name)
 
+packages, err := f.ListPackages()
 pkg, err := f.FetchPackage("hello")
 outputs, err := f.RealizePackage(pkg)
 
@@ -71,6 +72,11 @@ custom diagnostic path use `eval.Evaluator`.
 `Flake.Output` provides the corresponding resource-safe path for decoding any
 locked flake output. Attribute paths are represented as string slices so every
 element names one exact Nix attribute without parsing or escaping rules.
+
+`Flake.ListPackages` enumerates sorted top-level names from
+`packages.<system>`. It forces only the output containers needed for traversal,
+not individual package values. Its default system is
+`builtins.currentSystem`, cached during Flake construction.
 
 ### Advanced composition
 
@@ -155,7 +161,7 @@ Dependency direction is one-way:
 | --- | --- | --- | --- |
 | `nixcontext.Context` | `*nix.NixCContext` | owned lifetime root | `CContextFree` |
 | `gonix.Client` | composed resources | owns context, settings, store, evaluator | reverse dependency order |
-| `gonix.Flake` | reference, locked flake, projection value | owned; borrows Client graph | closes projection, lock, reference |
+| `gonix.Flake` | reference, locked flake, projection value, cached current system | owned; borrows Client graph | closes projection, lock, reference |
 | `store.Store` | `*nix.Store` plus cached metadata | owned; borrows Context | `StoreFree` |
 | `storepath.Path` | `*nix.StorePath` | owned or cloned | `StorePathFree` |
 | `store.Derivation` | `*nix.NixDerivation` plus cached JSON | owned or cloned | `DerivationFree` |
@@ -242,6 +248,8 @@ still be closed after the Evaluator while their Context remains open.
 - `gonix.NewFlake` is the explicitly assembled advanced constructor.
 - `Flake.Output(path, out)` traverses and unmarshals exact locked-output
   attributes.
+- `Flake.ListPackages(opts...)` lists sorted top-level names from
+  `packages.<system>` without decoding package values.
 - `Flake.FetchPackage(name, opts...)` selects and decodes a package for a
   system from `packages.<system>`.
 - `Flake.RealizePackage(pkg)` realizes an already selected package.

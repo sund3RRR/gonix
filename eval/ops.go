@@ -227,6 +227,48 @@ func (e *Evaluator) Attr(v *Value, name string) (*Value, error) {
 	return value, nil
 }
 
+// AttrLazy returns a caller-owned attribute without forcing its value.
+func (e *Evaluator) AttrLazy(v *Value, name string) (*Value, error) {
+	if e.state == nil {
+		return nil, status.ErrClosed
+	}
+
+	rawCtx, err := e.ctx.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("eval: failed to borrow context: %w", err)
+	}
+
+	if err := e.validateValue(v); err != nil {
+		return nil, fmt.Errorf("eval: failed to validate value: %w", err)
+	}
+
+	if err := e.Force(v); err != nil {
+		return nil, fmt.Errorf("eval: failed to force parent value: %w", err)
+	}
+	typ, err := v.Type()
+	if err != nil {
+		return nil, fmt.Errorf("eval: failed to get parent value type: %w", err)
+	}
+	if typ != ValueTypeAttrs {
+		return nil, &ValueTypeError{Actual: typ, Expected: ValueTypeAttrs}
+	}
+
+	child := nix.GetAttrBynameLazy(rawCtx, v.ptr, e.state, name)
+	if child == nil {
+		return nil, fmt.Errorf("eval: failed to get lazy attr %q: %w", name, status.FromContext(rawCtx))
+	}
+
+	value, err := e.WrapValue(child)
+	if err != nil {
+		if code := nix.ValueDecref(rawCtx, child); status.ErrorCode(code) != status.ErrorCodeOK {
+			return nil, fmt.Errorf("eval: failed to wrap lazy attr %q and decref value: %w", name, status.FromContext(rawCtx))
+		}
+		return nil, fmt.Errorf("eval: failed to wrap lazy attr %q: %w", name, err)
+	}
+
+	return value, nil
+}
+
 // AttrByIndex returns the caller-owned forced attribute value at index.
 func (e *Evaluator) AttrByIndex(v *Value, index uint32) (*Value, error) {
 	if e.state == nil {

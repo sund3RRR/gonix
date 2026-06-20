@@ -36,6 +36,15 @@ const (
 	SourceTypeIndirect SourceType = "indirect"
 )
 
+// PackageRef identifies a top-level package exposed for one flake system.
+//
+// PackageRef is descriptive Go-owned data and does not verify that the
+// referenced output is a derivation.
+type PackageRef struct {
+	Name   string `json:"name"`
+	System string `json:"system"`
+}
+
 // Package describes the common public shape of an evaluated Nix package.
 //
 // In Nix this is normally a derivation-like attribute set, not a source file.
