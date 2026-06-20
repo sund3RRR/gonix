@@ -158,11 +158,18 @@ func TestFlakeCachedLockMetadata(t *testing.T) {
 	if err := json.Unmarshal(writtenLockJSON, &writtenLock); err != nil {
 		t.Fatalf("decode written lock JSON: %v", err)
 	}
-	if got := f.LockInfo(); !reflect.DeepEqual(got, writtenLock) {
+	got, err := f.LockInfo()
+	if err != nil {
+		t.Fatalf("Flake.LockInfo() error = %v", err)
+	}
+	if !reflect.DeepEqual(got, writtenLock) {
 		t.Fatalf("cached LockInfo = %#v, want decoded written lock %#v", got, writtenLock)
 	}
 
-	info := f.LockInfo()
+	info, err := f.LockInfo()
+	if err != nil {
+		t.Fatalf("Flake.LockInfo() error = %v", err)
+	}
 	if info.Version == 0 || info.Root == "" || len(info.Nodes) == 0 {
 		t.Fatalf("Flake.LockInfo() = %#v, want populated lock graph", info)
 	}
@@ -187,6 +194,21 @@ func TestFlakeCachedLockMetadata(t *testing.T) {
 		t.Fatalf("data locked reference = %#v, want narHash", dataNode.Locked)
 	}
 
+	info.Version = 0
+	delete(info.Nodes, dataInput)
+	delete(root.Inputs, "alias")
+	if narHash := dataNode.Locked["narHash"]; len(narHash) != 0 {
+		narHash[0] ^= 0xff
+	}
+
+	freshInfo, err := f.LockInfo()
+	if err != nil {
+		t.Fatalf("Flake.LockInfo() after mutation error = %v", err)
+	}
+	if !reflect.DeepEqual(freshInfo, writtenLock) {
+		t.Fatalf("LockInfo() cache was mutated: got %#v, want %#v", freshInfo, writtenLock)
+	}
+
 	fingerprint := f.Fingerprint()
 	assertFingerprint(t, fingerprint)
 
@@ -201,7 +223,10 @@ func TestFlakeCachedLockMetadata(t *testing.T) {
 		t.Fatalf("equivalent Flake.Close() error = %v", err)
 	}
 
-	wantInfo := f.LockInfo()
+	wantInfo, err := f.LockInfo()
+	if err != nil {
+		t.Fatalf("Flake.LockInfo() before closure error = %v", err)
+	}
 	if err := f.Close(); err != nil {
 		t.Fatalf("Flake.Close() error = %v", err)
 	}
@@ -212,7 +237,11 @@ func TestFlakeCachedLockMetadata(t *testing.T) {
 	if got := f.Fingerprint(); got != fingerprint {
 		t.Fatalf("Fingerprint() after closure = %q, want %q", got, fingerprint)
 	}
-	if got := f.LockInfo(); !reflect.DeepEqual(got, wantInfo) {
+	got, err = f.LockInfo()
+	if err != nil {
+		t.Fatalf("LockInfo() after closure error = %v", err)
+	}
+	if !reflect.DeepEqual(got, wantInfo) {
 		t.Fatalf("LockInfo() after closure = %#v, want %#v", got, wantInfo)
 	}
 }
@@ -244,8 +273,14 @@ func TestFlakeFingerprintChangesWithInputOverride(t *testing.T) {
 	if original.Fingerprint() == overridden.Fingerprint() {
 		t.Fatalf("override fingerprint = original fingerprint %q", original.Fingerprint())
 	}
-	originalInfo := original.LockInfo()
-	overrideInfo := overridden.LockInfo()
+	originalInfo, err := original.LockInfo()
+	if err != nil {
+		t.Fatalf("original Flake.LockInfo() error = %v", err)
+	}
+	overrideInfo, err := overridden.LockInfo()
+	if err != nil {
+		t.Fatalf("overridden Flake.LockInfo() error = %v", err)
+	}
 	if reflect.DeepEqual(originalInfo, overrideInfo) {
 		t.Fatal("override LockInfo equals original LockInfo")
 	}

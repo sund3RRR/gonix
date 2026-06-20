@@ -260,7 +260,8 @@ still be closed after the Evaluator while their Context remains open.
   evaluator.
 - `flake.New` is the explicitly assembled advanced constructor.
 - `Flake.LockInfo` and `Flake.Fingerprint` expose cached lock metadata without
-  requiring live Nix resources; returned lock maps and slices are read-only.
+  requiring live Nix resources; each `LockInfo` call returns a freshly decoded
+  graph whose maps, slices, and raw JSON bytes are caller-owned.
 - `Flake.Output(path, out)` traverses and unmarshals exact locked-output
   attributes.
 - `Flake.OutputValue(path)` returns a caller-owned final output value and closes

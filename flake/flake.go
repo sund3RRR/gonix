@@ -26,7 +26,7 @@ import (
 type Flake struct {
 	fragment      string
 	fingerprint   string
-	lockInfo      LockInfo
+	lockInfoJSON  []byte
 	ctx           *nixcontext.Context
 	flakeSettings *flakesettings.Settings
 	evaluator     *eval.Evaluator
@@ -35,9 +35,8 @@ type Flake struct {
 
 // New locks ref using already-created fetcher and flake settings.
 //
-// New decodes and caches the resolved lock graph and fingerprint before
-// returning. The
-// returned Flake owns the raw locked flake. New borrows nixStore and
+// New caches the resolved lock graph JSON and fingerprint before returning.
+// The returned Flake owns the raw locked flake. New borrows nixStore and
 // fetchSettings only during construction. The ctx, flakeSettings, and evaluator
 // arguments must outlive raw operations on the returned Flake.
 func New(
@@ -160,11 +159,6 @@ func New(
 
 	lockJSON := []byte(utils.TakeCString(lockJSONPtr))
 
-	var lockInfo LockInfo
-	if err = json.Unmarshal(lockJSON, &lockInfo); err != nil {
-		return nil, fmt.Errorf("flake: failed to decode cached lock json: %w", err)
-	}
-
 	storePtr, err := nixStore.Borrow()
 	if err != nil {
 		return nil, fmt.Errorf("flake: failed to borrow store: %w", err)
@@ -182,7 +176,7 @@ func New(
 
 	f := &Flake{
 		fragment:      fragment,
-		lockInfo:      lockInfo,
+		lockInfoJSON:  lockJSON,
 		fingerprint:   fingerprint,
 		ctx:           ctx,
 		flakeSettings: flakeSettings,
@@ -304,11 +298,16 @@ func (f *Flake) OutputAttrs() (*eval.Value, error) {
 
 // LockInfo returns f's cached Nix lock graph.
 //
-// The returned maps, slices, and raw attribute bytes share the cached data and
-// must be treated as read-only. The metadata remains available after Flake,
+// Each call decodes a fresh graph, so callers may mutate the returned maps,
+// slices, and raw attribute bytes. The metadata remains available after Flake,
 // Store, or Context closure.
-func (f *Flake) LockInfo() LockInfo {
-	return f.lockInfo
+func (f *Flake) LockInfo() (LockInfo, error) {
+	var lockInfo LockInfo
+	if err := json.Unmarshal(f.lockInfoJSON, &lockInfo); err != nil {
+		return LockInfo{}, fmt.Errorf("flake: failed to decode lock info: %w", err)
+	}
+
+	return lockInfo, nil
 }
 
 // Fingerprint returns the cached lowercase base16 Nix fingerprint.

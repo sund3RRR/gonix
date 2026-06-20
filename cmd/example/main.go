@@ -40,7 +40,10 @@ func main() {
 
 	fmt.Printf("flake='%s' fragment='%s' fingerprint='%s' \n", ref, f.Fragment(), f.Fingerprint())
 
-	lockInfo := f.LockInfo()
+	lockInfo, err := f.LockInfo()
+	if err != nil {
+		log.Fatal(err)
+	}
 	lockJSON, err := json.Marshal(lockInfo)
 	if err != nil {
 		log.Fatal(err)

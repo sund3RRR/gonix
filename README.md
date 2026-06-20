@@ -164,7 +164,7 @@ Each opened Flake caches Nix's normalized resolved lock graph and optional
 fingerprint during construction:
 
 ```go
-lock := f.LockInfo()
+lock, err := f.LockInfo()
 fingerprint := f.Fingerprint()
 ```
 
@@ -174,7 +174,7 @@ direct-node and follows-path JSON variants. Fetcher-specific `original` and
 `locked` reference attributes remain `json.RawMessage` values so new Nix input
 schemes do not require gonix API changes. `LockNode.Flake` normalizes Nix's
 omitted-true JSON convention into an ordinary Go bool. The returned graph shares
-cached maps and slices and must be treated as read-only.
+no mutable data with the cache and may be modified by the caller.
 
 The fingerprint is Nix's lowercase hexadecimal locked-flake cache key. It is
 empty when Nix cannot fingerprint the source or considers the graph unlocked.
