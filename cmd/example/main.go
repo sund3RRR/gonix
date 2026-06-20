@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -30,11 +31,21 @@ func main() {
 	}
 	fmt.Printf("evaluation=%+v\n", evaluation)
 
-	f, err := client.OpenFlake("github:NixOS/nixpkgs/nixos-unstable")
+	ref := "github:NixOS/nixpkgs/nixpkgs-unstable"
+	f, err := client.OpenFlake(ref)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer f.Close() //nolint:errcheck
+
+	fmt.Printf("flake='%s' fragment='%s' fingerprint='%s' \n", ref, f.Fragment(), f.Fingerprint())
+
+	lockInfo := f.LockInfo()
+	lockJSON, err := json.Marshal(lockInfo)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("flake_meta=%v\n", string(lockJSON))
 
 	system := gonix.DefaultSystem()
 	packageValue, err := f.OutputValue([]string{"legacyPackages", system, "hello"})

@@ -92,7 +92,7 @@ func (c *Client) OpenFlake(ref string, opts ...flake.Option) (*flake.Flake, erro
 		return nil, status.ErrClosed
 	}
 
-	f, err := flake.New(c.ctx, c.fetcherSettings, c.flakeSettings, c.evaluator, ref, opts...)
+	f, err := flake.New(c.ctx, c.store, c.fetcherSettings, c.flakeSettings, c.evaluator, ref, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("client: failed to create flake: %w", err)
 	}

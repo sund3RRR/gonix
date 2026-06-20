@@ -4,7 +4,8 @@ Experimental high-level Go SDK for working with [Nix](https://github.com/NixOS/n
 
 `gonix` is an ergonomic Go layer built on top of
 [`nix-go-bindings`](https://github.com/sund3RRR/nix-go-bindings), which provides
-low-level generated bindings to the Nix C API.
+low-level generated bindings to the Nix C API and narrow binding-owned adapters
+for Nix functionality that has no public C equivalent.
 
 The goal of this package is to expose Nix concepts through Go-native APIs:
 contexts, stores, store paths, evaluation states, values, derivations, flakes,
@@ -68,6 +69,7 @@ composition.
 - [x] Flakes.
   - [x] Flake reference parsing.
   - [x] Locked flake workflows.
+  - [x] Cached lock graph metadata and fingerprints.
   - [x] Generic typed locked-output access.
 - [ ] Package-manager workflows.
   - [x] Generic flake output traversal.
@@ -155,6 +157,29 @@ its Client.
 returns Go-owned `RealizedOutput` values. Gonix intentionally leaves package
 discovery, package metadata normalization, indexing, and policy to higher-level
 package managers.
+
+## Flake lock metadata
+
+Each opened Flake caches Nix's normalized resolved lock graph and optional
+fingerprint during construction:
+
+```go
+lock := f.LockInfo()
+fingerprint := f.Fingerprint()
+```
+
+`LockInfo` types the lock graph, nodes, non-flake flags, and override parent
+paths. `LockInput.GetNode` and `LockInput.GetFollows` safely distinguish Nix's
+direct-node and follows-path JSON variants. Fetcher-specific `original` and
+`locked` reference attributes remain `json.RawMessage` values so new Nix input
+schemes do not require gonix API changes. `LockNode.Flake` normalizes Nix's
+omitted-true JSON convention into an ordinary Go bool. The returned graph shares
+cached maps and slices and must be treated as read-only.
+
+The fingerprint is Nix's lowercase hexadecimal locked-flake cache key. It is
+empty when Nix cannot fingerprint the source or considers the graph unlocked.
+The fragment, lock information, and fingerprint remain available after the
+Flake or Client is closed.
 
 ## License
 

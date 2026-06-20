@@ -1,10 +1,13 @@
 package gonix
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/sund3RRR/gonix/eval"
@@ -103,6 +106,155 @@ func TestClientOpensMultipleFlakes(t *testing.T) {
 	}
 	if err := first.Close(); err != nil {
 		t.Fatalf("first Flake.Close() error = %v", err)
+	}
+}
+
+func TestFlakeConstructorMetadataFailure(t *testing.T) {
+	ref, _ := writeOutputFlake(t)
+	client := newTestClient(t)
+
+	if err := client.store.Close(); err != nil {
+		t.Fatalf("Store.Close() error = %v", err)
+	}
+
+	f, err := flake.New(
+		client.ctx,
+		client.store,
+		client.fetcherSettings,
+		client.flakeSettings,
+		client.evaluator,
+		ref,
+	)
+	if !errors.Is(err, ErrClosed) {
+		t.Fatalf("flake.New(closed store) error = %v, want ErrClosed", err)
+	}
+	if f != nil {
+		t.Fatalf("flake.New(closed store) = %v, want nil", f)
+	}
+}
+
+func TestFlakeCachedLockMetadata(t *testing.T) {
+	ref, dir := writeLockMetadataFlake(t)
+	client := newTestClient(t)
+
+	writer, err := client.OpenFlake(ref, flake.WithLockMode(flake.LockModeWriteAsNeeded))
+	if err != nil {
+		t.Fatalf("Client.OpenFlake(write lock) error = %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("writer Flake.Close() error = %v", err)
+	}
+
+	f, err := client.OpenFlake(ref, flake.WithLockMode(flake.LockModeCheck))
+	if err != nil {
+		t.Fatalf("Client.OpenFlake(check lock) error = %v", err)
+	}
+
+	writtenLockJSON, err := os.ReadFile(filepath.Join(dir, "flake.lock"))
+	if err != nil {
+		t.Fatalf("read written flake.lock: %v", err)
+	}
+	var writtenLock flake.LockInfo
+	if err := json.Unmarshal(writtenLockJSON, &writtenLock); err != nil {
+		t.Fatalf("decode written lock JSON: %v", err)
+	}
+	if got := f.LockInfo(); !reflect.DeepEqual(got, writtenLock) {
+		t.Fatalf("cached LockInfo = %#v, want decoded written lock %#v", got, writtenLock)
+	}
+
+	info := f.LockInfo()
+	if info.Version == 0 || info.Root == "" || len(info.Nodes) == 0 {
+		t.Fatalf("Flake.LockInfo() = %#v, want populated lock graph", info)
+	}
+
+	root := info.Nodes[info.Root]
+	if got := lockFollowsPath(t, root.Inputs["alias"]); len(got) != 1 || got[0] != "dep" {
+		t.Fatalf("root alias input = %#v, want follows [dep]", got)
+	}
+	dataInput := lockNodeName(t, root.Inputs["data"])
+	dataNode, ok := info.Nodes[dataInput]
+	if !ok {
+		t.Fatalf("data input target %q is absent from lock nodes", dataInput)
+	}
+	if dataNode.Flake {
+		t.Fatal("data node Flake = true, want explicit false")
+	}
+	depInput := lockNodeName(t, root.Inputs["dep"])
+	if !info.Nodes[depInput].Flake {
+		t.Fatal("dep node Flake = false, want omitted field to default to true")
+	}
+	if _, ok := dataNode.Locked["narHash"]; !ok {
+		t.Fatalf("data locked reference = %#v, want narHash", dataNode.Locked)
+	}
+
+	fingerprint := f.Fingerprint()
+	assertFingerprint(t, fingerprint)
+
+	equivalent, err := client.OpenFlake(ref, flake.WithLockMode(flake.LockModeCheck))
+	if err != nil {
+		t.Fatalf("Client.OpenFlake(equivalent) error = %v", err)
+	}
+	if got := equivalent.Fingerprint(); got != fingerprint {
+		t.Fatalf("equivalent fingerprint = %q, want %q", got, fingerprint)
+	}
+	if err := equivalent.Close(); err != nil {
+		t.Fatalf("equivalent Flake.Close() error = %v", err)
+	}
+
+	wantInfo := f.LockInfo()
+	if err := f.Close(); err != nil {
+		t.Fatalf("Flake.Close() error = %v", err)
+	}
+	if err := client.Close(); err != nil {
+		t.Fatalf("Client.Close() error = %v", err)
+	}
+
+	if got := f.Fingerprint(); got != fingerprint {
+		t.Fatalf("Fingerprint() after closure = %q, want %q", got, fingerprint)
+	}
+	if got := f.LockInfo(); !reflect.DeepEqual(got, wantInfo) {
+		t.Fatalf("LockInfo() after closure = %#v, want %#v", got, wantInfo)
+	}
+}
+
+func TestFlakeFingerprintChangesWithInputOverride(t *testing.T) {
+	originalRef, _ := writeValueFlake(t, "original")
+	overrideRef, _ := writeValueFlake(t, "override")
+	mainRef, _ := writeFlake(t, fmt.Sprintf(`{
+  inputs.dep.url = %q;
+  outputs = { self, dep }: {
+    value = dep.value;
+  };
+}
+`, originalRef))
+	client := newTestClient(t)
+
+	original := openTestFlake(t, client, mainRef)
+	overridden, err := client.OpenFlake(
+		mainRef,
+		flake.WithInputOverride("dep", overrideRef),
+	)
+	if err != nil {
+		t.Fatalf("Client.OpenFlake(input override) error = %v", err)
+	}
+	defer overridden.Close() //nolint:errcheck
+
+	assertFingerprint(t, original.Fingerprint())
+	assertFingerprint(t, overridden.Fingerprint())
+	if original.Fingerprint() == overridden.Fingerprint() {
+		t.Fatalf("override fingerprint = original fingerprint %q", original.Fingerprint())
+	}
+	originalInfo := original.LockInfo()
+	overrideInfo := overridden.LockInfo()
+	if reflect.DeepEqual(originalInfo, overrideInfo) {
+		t.Fatal("override LockInfo equals original LockInfo")
+	}
+	originalDepInput := lockNodeName(t, originalInfo.Nodes[originalInfo.Root].Inputs["dep"])
+	overrideDepInput := lockNodeName(t, overrideInfo.Nodes[overrideInfo.Root].Inputs["dep"])
+	originalDep := originalInfo.Nodes[originalDepInput]
+	overrideDep := overrideInfo.Nodes[overrideDepInput]
+	if reflect.DeepEqual(originalDep.Locked, overrideDep.Locked) {
+		t.Fatalf("override locked reference = original locked reference %#v", originalDep.Locked)
 	}
 }
 
@@ -448,6 +600,33 @@ func writeValueFlake(t *testing.T, value string) (ref string, dir string) {
 `, value))
 }
 
+func writeLockMetadataFlake(t *testing.T) (ref string, dir string) {
+	t.Helper()
+
+	dependencyRef, _ := writeValueFlake(t, "dependency")
+	dataDir := t.TempDir()
+	resolvedDataDir, err := filepath.EvalSymlinks(dataDir)
+	if err != nil {
+		t.Fatalf("resolve data input directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(resolvedDataDir, "value.txt"), []byte("data"), 0o644); err != nil {
+		t.Fatalf("write non-flake input: %v", err)
+	}
+
+	return writeFlake(t, fmt.Sprintf(`{
+  inputs.dep.url = %q;
+  inputs.alias.follows = "dep";
+  inputs.data = {
+    url = "path:%s";
+    flake = false;
+  };
+  outputs = { self, dep, ... }: {
+    value = dep.value;
+  };
+}
+`, dependencyRef, filepath.ToSlash(resolvedDataDir)))
+}
+
 func writeFlake(t *testing.T, contents string) (ref string, dir string) {
 	t.Helper()
 
@@ -463,4 +642,37 @@ func writeFlake(t *testing.T, contents string) (ref string, dir string) {
 	}
 
 	return fmt.Sprintf("path:%s", filepath.ToSlash(dir)), dir
+}
+
+func assertFingerprint(t *testing.T, fingerprint string) {
+	t.Helper()
+
+	if len(fingerprint) != 64 {
+		t.Fatalf("fingerprint length = %d, want 64: %q", len(fingerprint), fingerprint)
+	}
+	for _, r := range fingerprint {
+		if !strings.ContainsRune("0123456789abcdef", r) {
+			t.Fatalf("fingerprint = %q, want lowercase base16", fingerprint)
+		}
+	}
+}
+
+func lockNodeName(t *testing.T, input flake.LockInput) string {
+	t.Helper()
+
+	node, ok := input.GetNode()
+	if !ok {
+		t.Fatalf("lock input = %#v, want direct node string", input)
+	}
+	return node
+}
+
+func lockFollowsPath(t *testing.T, input flake.LockInput) []string {
+	t.Helper()
+
+	path, ok := input.GetFollows()
+	if !ok {
+		t.Fatalf("lock input = %#v, want follows path array", input)
+	}
+	return path
 }

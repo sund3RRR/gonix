@@ -1,8 +1,8 @@
 # gonix architecture
 
 `gonix` is a high-level Go SDK over
-`github.com/sund3RRR/nix-go-bindings`, the generated bridge to the public Nix C
-API.
+`github.com/sund3RRR/nix-go-bindings`, the generated bridge to the Nix C API and
+narrow binding-owned adapters.
 
 The SDK has two entry layers:
 
@@ -15,6 +15,11 @@ The SDK has two entry layers:
 `nix-go-bindings` is the only gateway to Nix. Gonix must not duplicate
 generated bindings, call private Nix C++ APIs, add ad hoc cgo, or shell out to
 the `nix` CLI for core SDK behavior.
+
+`nix-go-bindings v0.2.0` owns a narrow C++ flake adapter for resolved lock JSON
+and Nix's locked-flake fingerprint because upstream libflake-c does not expose
+those operations. Gonix consumes only the generated Go functions and does not
+depend on private Nix headers directly.
 
 Raw generated context pointers never cross public constructor boundaries.
 Public constructors receive `*nixcontext.Context`. Narrow integration points
@@ -104,14 +109,16 @@ defer e.Close()
 owns only the raw Nix context and does not track children. Every child must be
 closed before its Context.
 
-The `flake.New` constructor is an advanced composition point. Its Context,
-settings, and Evaluator arguments are borrowed, must belong to the same object
-graph, and must outlive the returned Flake.
+The `flake.New` constructor is an advanced composition point. All arguments
+must belong to the same object graph. Store and fetcher settings are borrowed
+only during construction; Context, flake settings, and Evaluator must outlive
+raw operations on the returned Flake.
 
-Lock metadata is not exposed yet. The public libflake C API can return evaluated
-outputs from a locked flake but cannot inspect its resolved reference or lock
-graph. Gonix does not reconstruct that information by re-locking, reading lock
-files, invoking private C++ APIs, or shelling out.
+During construction, `flake.New` decodes and caches Nix-normalized lock metadata
+and Nix's optional locked-flake fingerprint. Lock graph access never re-locks, reads
+`flake.lock`, shells out, or evaluates a projection. The typed graph preserves
+fetcher-specific reference attributes as raw JSON so the stable gonix schema
+does not duplicate every Nix input scheme.
 
 ## Configuration
 
@@ -149,7 +156,7 @@ General context settings live on `nixcontext.Context`, not Client:
 | `eval` | `Evaluator`, `Value`, builders, realized strings | Evaluation states and values tied to an evaluator. |
 | `fetchers` | `Settings` | Fetcher settings lifecycle. |
 | `flakesettings` | `Settings` | Flake settings lifecycle and evaluator integration. |
-| `flake` | `Flake`, `Option`, `LockMode` | Flake parsing, locking, output traversal, and locked-flake lifecycle. |
+| `flake` | `Flake`, `LockInfo`, `LockNode`, `LockInput`, `LockReference`, options | Flake parsing, locking, cached lock metadata, fingerprinting, output traversal, and lifecycle. |
 | `internal/status` | `NixError`, `ErrorCode`, `ErrClosed` | Stable conversion of mutable Nix context errors. |
 | `pkg/utils` | `TakeCString`, `EncodeNix32` | Shared generated-binding and Nix representation adapters. |
 
@@ -159,7 +166,7 @@ Dependency direction is one-way:
 - public subpackages may import `nixcontext`;
 - `store` may import `storepath`;
 - `eval` may import `store`, `storepath`, and `flakesettings`;
-- `flake` may import `eval`, `fetchers`, and `flakesettings`;
+- `flake` may import `eval`, `fetchers`, `flakesettings`, and `store`;
 - subpackages do not import root `gonix`.
 
 ## Ownership and lifetimes
@@ -168,7 +175,7 @@ Dependency direction is one-way:
 | --- | --- | --- | --- |
 | `nixcontext.Context` | `*nix.NixCContext` | owned lifetime root | `CContextFree` |
 | `gonix.Client` | composed resources | owns context, settings, store, evaluator | reverse dependency order |
-| `flake.Flake` | `*nix.NixLockedFlake` plus cached fragment | owned; borrows Context, settings, and Evaluator | `LockedFlakeFree` |
+| `flake.Flake` | `*nix.NixLockedFlake` plus cached fragment, lock graph, and fingerprint | owned; borrows Context, flake settings, and Evaluator; borrows Store and fetcher settings during construction | `LockedFlakeFree` |
 | `store.Store` | `*nix.Store` plus cached metadata | owned; borrows Context | `StoreFree` |
 | `storepath.Path` | `*nix.StorePath` | owned or cloned | `StorePathFree` |
 | `store.Derivation` | `*nix.NixDerivation` plus cached JSON | owned or cloned | `DerivationFree` |
@@ -208,6 +215,7 @@ flowchart TD
     Flake -->|owns| LockedFlake
     Flake -->|borrows| Eval
     Flake -->|borrows| Context
+    Flake -->|borrows during construction| Store
     Flake -->|creates| Value
 
     Eval -->|creates| Value
@@ -218,10 +226,10 @@ flowchart TD
 
 All Close methods are idempotent. Methods depending on a closed owned handle or
 closed Context return `status.ErrClosed` directly or wrapped with operation
-context. Cached metadata accessors on `store.Store` and `storepath.Path`, plus
-cached serialization on `store.Derivation`, remain available after their raw
-handles or Context are closed. Objects are not goroutine-safe unless explicitly
-documented.
+context. Cached metadata accessors on `store.Store`, `storepath.Path`, and
+`flake.Flake`, plus cached serialization on `store.Derivation`, remain available
+after their raw handles or Context are closed. Objects are not goroutine-safe
+unless explicitly documented.
 
 Caller-owned resources must be closed before the resources they borrow:
 
@@ -251,6 +259,8 @@ still be closed after the Evaluator while their Context remains open.
 - `Client.Unmarshal` decodes a caller-owned value created by the Client's
   evaluator.
 - `flake.New` is the explicitly assembled advanced constructor.
+- `Flake.LockInfo` and `Flake.Fingerprint` expose cached lock metadata without
+  requiring live Nix resources; returned lock maps and slices are read-only.
 - `Flake.Output(path, out)` traverses and unmarshals exact locked-output
   attributes.
 - `Flake.OutputValue(path)` returns a caller-owned final output value and closes

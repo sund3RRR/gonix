@@ -2,6 +2,7 @@
 package flake
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/sund3RRR/gonix/eval"
@@ -10,28 +11,22 @@ import (
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/nixcontext"
 	"github.com/sund3RRR/gonix/pkg/utils"
+	"github.com/sund3RRR/gonix/store"
 	nix "github.com/sund3RRR/nix-go-bindings"
-)
-
-// LockMode selects how Nix should handle a flake lock file.
-type LockMode int
-
-const (
-	// LockModeVirtual resolves the lock in memory without writing flake.lock.
-	LockModeVirtual LockMode = iota
-	// LockModeCheck fails unless the existing lock file is already usable.
-	LockModeCheck
-	// LockModeWriteAsNeeded creates or updates flake.lock when needed.
-	LockModeWriteAsNeeded
 )
 
 // Flake is an owned Nix locked flake.
 //
-// A Flake owns the underlying Nix locked flake and borrows the evaluator,
-// Nix context, and flake settings used to create it. Close is idempotent, but
-// methods that need the raw locked flake return status.ErrClosed after Close.
+// A Flake owns the underlying Nix locked flake and borrows the Evaluator, Nix
+// context, and flake settings used to create it. The Store and fetcher settings
+// are borrowed only during construction. Close is idempotent, but methods that
+// need the raw locked flake return status.ErrClosed after Close. Fragment,
+// LockInfo, and Fingerprint use cached metadata and remain available after Close
+// or closure of borrowed resources.
 type Flake struct {
 	fragment      string
+	fingerprint   string
+	lockInfo      LockInfo
 	ctx           *nixcontext.Context
 	flakeSettings *flakesettings.Settings
 	evaluator     *eval.Evaluator
@@ -40,11 +35,14 @@ type Flake struct {
 
 // New locks ref using already-created fetcher and flake settings.
 //
-// The returned Flake owns the raw locked flake. The ctx, fetchSettings,
-// flakeSettings, and evaluator arguments are borrowed and must outlive the
-// returned Flake.
+// New decodes and caches the resolved lock graph and fingerprint before
+// returning. The
+// returned Flake owns the raw locked flake. New borrows nixStore and
+// fetchSettings only during construction. The ctx, flakeSettings, and evaluator
+// arguments must outlive raw operations on the returned Flake.
 func New(
 	ctx *nixcontext.Context,
+	nixStore *store.Store,
 	fetchSettings *fetchers.Settings,
 	flakeSettings *flakesettings.Settings,
 	evaluator *eval.Evaluator,
@@ -145,13 +143,54 @@ func New(
 		return nil, fmt.Errorf("flake: failed to lock reference: %w", status.FromContext(rawCtx))
 	}
 
-	return &Flake{
+	defer func() {
+		if err != nil {
+			nix.LockedFlakeFree(locked)
+		}
+	}()
+
+	lockJSONPtr := nix.LockedFlakeGetLockJson(rawCtx, locked)
+	if lockJSONPtr == nil {
+		if err = status.FromContext(rawCtx); err != nil {
+			return nil, fmt.Errorf("flake: failed to get lock json: %w", err)
+		}
+		err = fmt.Errorf("flake: failed to get lock json")
+		return nil, err
+	}
+
+	lockJSON := []byte(utils.TakeCString(lockJSONPtr))
+
+	var lockInfo LockInfo
+	if err = json.Unmarshal(lockJSON, &lockInfo); err != nil {
+		return nil, fmt.Errorf("flake: failed to decode cached lock json: %w", err)
+	}
+
+	storePtr, err := nixStore.Borrow()
+	if err != nil {
+		return nil, fmt.Errorf("flake: failed to borrow store: %w", err)
+	}
+
+	var fingerprint string
+	fingerprintPtr := nix.LockedFlakeGetFingerprint(rawCtx, storePtr, fetchSettingsPtr, locked)
+	if fingerprintPtr == nil {
+		if err = status.FromContext(rawCtx); err != nil {
+			return nil, fmt.Errorf("flake: failed to get fingerprint: %w", err)
+		}
+	} else {
+		fingerprint = utils.TakeCString(fingerprintPtr)
+	}
+
+	f := &Flake{
 		fragment:      fragment,
+		lockInfo:      lockInfo,
+		fingerprint:   fingerprint,
 		ctx:           ctx,
 		flakeSettings: flakeSettings,
 		evaluator:     evaluator,
 		ptr:           locked,
-	}, nil
+	}
+
+	return f, nil
 }
 
 // Fragment returns the fragment parsed from the original flake reference.
@@ -263,6 +302,24 @@ func (f *Flake) OutputAttrs() (*eval.Value, error) {
 	return value, nil
 }
 
+// LockInfo returns f's cached Nix lock graph.
+//
+// The returned maps, slices, and raw attribute bytes share the cached data and
+// must be treated as read-only. The metadata remains available after Flake,
+// Store, or Context closure.
+func (f *Flake) LockInfo() LockInfo {
+	return f.lockInfo
+}
+
+// Fingerprint returns the cached lowercase base16 Nix fingerprint.
+//
+// An empty string means Nix could not fingerprint the locked flake, for example
+// because its lock graph is unlocked or its root input is not fingerprintable.
+// The cached value remains available after Flake, Store, or Context closure.
+func (f *Flake) Fingerprint() string {
+	return f.fingerprint
+}
+
 // Borrow returns the borrowed raw Nix locked flake.
 //
 // Callers must not free the returned pointer and must not retain it beyond the
@@ -281,7 +338,7 @@ func (f *Flake) Borrow() (*nix.NixLockedFlake, error) {
 // Close is safe to call more than once. Once Close returns, methods that need
 // the raw locked flake report status.ErrClosed.
 func (f *Flake) Close() error {
-	if f.ptr == nil {
+	if f == nil || f.ptr == nil {
 		return nil
 	}
 
