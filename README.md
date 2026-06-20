@@ -143,7 +143,9 @@ as one top-level `PackageRef`.
 `FetchPackage` is the normalized package convenience API for
 `packages.<system>` outputs. It intentionally does not fall back to
 `legacyPackages`. `RealizePackage` builds or substitutes the selected package
-and returns Go-owned `RealizedPackageOutput` values.
+and returns Go-owned `RealizedPackageOutput` values. Maintainers are projected
+independently as best-effort metadata, so malformed upstream maintainer entries
+produce an empty list without hiding failures in the core package projection.
 
 ## License
 

@@ -15,28 +15,32 @@ import (
 	"github.com/sund3RRR/gonix/store"
 )
 
-const packageProjectionPath = "projections/package.nix"
+const (
+	packageProjectionPath    = "projections/package.nix"
+	maintainerProjectionPath = "projections/maintainer.nix"
+)
 
 // Flake is a parsed and locked flake with high-level output workflows.
 //
-// Flake owns its parsed reference, lock, and package projection. It borrows the
-// Store, Evaluator, settings, and Context used to create it, all of which must
-// remain open until the Flake is closed.
+// Flake owns its parsed reference, lock, and package projections. It borrows
+// the Store, Evaluator, settings, and Context used to create it, all of which
+// must remain open until the Flake is closed.
 type Flake struct {
-	parsedRef         *flake.Ref
-	lock              *flake.LockedFlake
-	packageProjection *eval.Value
-	defaultSystem     string
-	store             *store.Store
-	evaluator         *eval.Evaluator
+	parsedRef            *flake.Ref
+	lock                 *flake.LockedFlake
+	packageProjection    *eval.Value
+	maintainerProjection *eval.Value
+	defaultSystem        string
+	store                *store.Store
+	evaluator            *eval.Evaluator
 }
 
 // NewFlake parses and locks a flake using an explicitly assembled resource graph.
 //
 // This is an advanced constructor. ctx, fetchSettings, flakeSettings, s, and e
 // are borrowed and must all belong to the same Nix context and outlive the
-// returned Flake. The Flake owns its parsed reference, locked flake, and package
-// projection and must be closed by the caller.
+// returned Flake. The Flake owns its parsed reference, locked flake, and
+// package projections and must be closed by the caller.
 func NewFlake(
 	ctx *nixcontext.Context,
 	fetchSettings *fetchers.Settings,
@@ -81,6 +85,15 @@ func NewFlake(
 	f.packageProjection, err = e.EvalString(string(projection), packageProjectionPath)
 	if err != nil {
 		return nil, fmt.Errorf("flake: failed to evaluate package projection: %w", err)
+	}
+
+	projection, err = scripts.Projections.ReadFile(maintainerProjectionPath)
+	if err != nil {
+		return nil, fmt.Errorf("flake: failed to read maintainer projection: %w", err)
+	}
+	f.maintainerProjection, err = e.EvalString(string(projection), maintainerProjectionPath)
+	if err != nil {
+		return nil, fmt.Errorf("flake: failed to evaluate maintainer projection: %w", err)
 	}
 
 	f.defaultSystem, err = currentSystem(e)
@@ -308,6 +321,9 @@ func (f *Flake) requireAttrs(value *eval.Value, name string) error {
 }
 
 // FetchPackage fetches a package by name from locked and decodes it.
+//
+// Maintainer metadata is best-effort. If its independent projection cannot be
+// evaluated or decoded, FetchPackage succeeds with an empty maintainer list.
 func (c *Flake) FetchPackage(name string, opts ...FetchPackageOption) (Package, error) {
 	if c.lock == nil {
 		return Package{}, status.ErrClosed
@@ -347,6 +363,21 @@ func (c *Flake) FetchPackage(name string, opts ...FetchPackageOption) (Package, 
 	var pkg Package
 	if err := c.evaluator.Unmarshal(value, &pkg); err != nil {
 		return Package{}, fmt.Errorf("flake: failed to fetch package: unmarshal package: %w", err)
+	}
+
+	pkg.Meta.Maintainers = []Maintainer{}
+	maintainerValue, err := c.evaluator.Call(c.maintainerProjection, arg)
+	if err != nil {
+		return pkg, nil
+	}
+	defer maintainerValue.Close() //nolint:errcheck
+
+	var maintainers []Maintainer
+	if err := c.evaluator.Unmarshal(maintainerValue, &maintainers); err != nil {
+		return pkg, nil
+	}
+	if maintainers != nil {
+		pkg.Meta.Maintainers = maintainers
 	}
 
 	return pkg, nil
@@ -419,7 +450,12 @@ func (f *Flake) Close() error {
 		return nil
 	}
 
-	errs := make([]error, 0, 3)
+	errs := make([]error, 0, 4)
+
+	if err := f.maintainerProjection.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	f.maintainerProjection = nil
 
 	if err := f.packageProjection.Close(); err != nil {
 		errs = append(errs, err)

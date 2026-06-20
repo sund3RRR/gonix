@@ -92,8 +92,9 @@ type RealizedPackageOutput struct {
 // PackageMeta describes the conventional nixpkgs meta attribute set.
 //
 // Many meta fields are intentionally optional because nixpkgs does not require
-// every package to define them. The package projection normalizes richer
-// nixpkgs metadata into this stable Go-native surface.
+// every package to define them. The package projections normalize richer
+// nixpkgs metadata into this stable Go-native surface. Maintainers are
+// best-effort and are empty when their independent projection fails.
 type PackageMeta struct {
 	Broken               bool         `nix:"broken" json:"broken" validate:"optional"`
 	Unfree               bool         `nix:"unfree" json:"unfree" validate:"optional"`

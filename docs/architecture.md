@@ -161,7 +161,7 @@ Dependency direction is one-way:
 | --- | --- | --- | --- |
 | `nixcontext.Context` | `*nix.NixCContext` | owned lifetime root | `CContextFree` |
 | `gonix.Client` | composed resources | owns context, settings, store, evaluator | reverse dependency order |
-| `gonix.Flake` | reference, locked flake, projection value, cached current system | owned; borrows Client graph | closes projection, lock, reference |
+| `gonix.Flake` | reference, locked flake, projection values, cached current system | owned; borrows Client graph | closes projections, lock, reference |
 | `store.Store` | `*nix.Store` plus cached metadata | owned; borrows Context | `StoreFree` |
 | `storepath.Path` | `*nix.StorePath` | owned or cloned | `StorePathFree` |
 | `store.Derivation` | `*nix.NixDerivation` plus cached JSON | owned or cloned | `DerivationFree` |
@@ -251,7 +251,8 @@ still be closed after the Evaluator while their Context remains open.
 - `Flake.ListPackages(opts...)` lists sorted top-level names from
   `packages.<system>` without decoding package values.
 - `Flake.FetchPackage(name, opts...)` selects and decodes a package for a
-  system from `packages.<system>`.
+  system from `packages.<system>`. Core package metadata is strict, while
+  maintainers are decoded by an isolated best-effort projection.
 - `Flake.RealizePackage(pkg)` realizes an already selected package.
 - Package and realized output results are Go-owned DTOs.
 - Low-level parsing and locking remain available through package `flake`.

@@ -73,6 +73,23 @@ func TestClientFlakeWorkflowAndLifecycle(t *testing.T) {
 		if got := pkg.Outputs["out"].OutputName; got != "out" {
 			t.Fatalf("package output name = %q, want out", got)
 		}
+		wantMaintainers := []Maintainer{
+			{
+				Name:   "Gonix Maintainer",
+				Email:  "gonix@example.com",
+				GitHub: "gonix",
+				GitLab: "gonix-gl",
+				Matrix: "@gonix:example.com",
+				Keys: []MaintainerKey{{
+					Fingerprint: "0123456789ABCDEF",
+					LongKeyID:   "89ABCDEF",
+				}},
+			},
+			{Name: "plain-maintainer", Keys: []MaintainerKey{}},
+		}
+		if !reflect.DeepEqual(pkg.Meta.Maintainers, wantMaintainers) {
+			t.Fatalf("package maintainers = %#v, want %#v", pkg.Meta.Maintainers, wantMaintainers)
+		}
 
 		if err := f.Close(); err != nil {
 			t.Fatalf("Flake.Close() error = %v", err)
@@ -302,6 +319,63 @@ func TestFlakePackageAPIs(t *testing.T) {
 		}
 		if _, err := f.RealizePackage(Package{}); !errors.Is(err, ErrClosed) {
 			t.Fatalf("Flake.RealizePackage() after Close error = %v, want ErrClosed", err)
+		}
+	})
+
+	t.Run("maintainers are best effort", func(t *testing.T) {
+		client, err := NewClient(ClientConfig{})
+		if err != nil {
+			t.Fatalf("NewClient() error = %v", err)
+		}
+		t.Cleanup(func() { _ = client.Close() })
+
+		f, err := client.NewFlake(writeMaintainerFlake(t))
+		if err != nil {
+			t.Fatalf("Client.NewFlake() error = %v", err)
+		}
+		t.Cleanup(func() { _ = f.Close() })
+
+		wantMaintainers := []Maintainer{{
+			Name:   "Valid Maintainer",
+			Email:  "valid@example.com",
+			GitHub: "valid",
+			GitLab: "valid-gl",
+			Matrix: "@valid:example.com",
+			Keys: []MaintainerKey{{
+				Fingerprint: "FEDCBA9876543210",
+				LongKeyID:   "76543210",
+			}},
+		}}
+		valid, err := f.FetchPackage("valid", WithFetchPackageSystem(DefaultSystem()))
+		if err != nil {
+			t.Fatalf("Flake.FetchPackage(valid) error = %v", err)
+		}
+		if !reflect.DeepEqual(valid.Meta.Maintainers, wantMaintainers) {
+			t.Fatalf("valid maintainers = %#v, want %#v", valid.Meta.Maintainers, wantMaintainers)
+		}
+
+		for _, name := range []string{"missing", "missingAttr", "undefined", "thrown", "malformed"} {
+			t.Run(name, func(t *testing.T) {
+				pkg, err := f.FetchPackage(name, WithFetchPackageSystem(DefaultSystem()))
+				if err != nil {
+					t.Fatalf("Flake.FetchPackage(%s) error = %v", name, err)
+				}
+				if pkg.Meta.Maintainers == nil || len(pkg.Meta.Maintainers) != 0 {
+					t.Fatalf("Flake.FetchPackage(%s) maintainers = %#v, want non-nil empty slice", name, pkg.Meta.Maintainers)
+				}
+
+				again, err := f.FetchPackage("valid", WithFetchPackageSystem(DefaultSystem()))
+				if err != nil {
+					t.Fatalf("Flake.FetchPackage(valid) after %s error = %v", name, err)
+				}
+				if !reflect.DeepEqual(again.Meta.Maintainers, wantMaintainers) {
+					t.Fatalf("valid maintainers after %s = %#v, want %#v", name, again.Meta.Maintainers, wantMaintainers)
+				}
+			})
+		}
+
+		if _, err := f.FetchPackage("coreBroken", WithFetchPackageSystem(DefaultSystem())); err == nil {
+			t.Fatal("Flake.FetchPackage(coreBroken) error = nil")
 		}
 	})
 }
@@ -557,6 +631,20 @@ func writePackageFlake(t *testing.T) string {
         outPath = "/nix/store/11111111111111111111111111111111-demo";
         outputName = "out";
         outputs = [ "out" ];
+        meta.maintainers = [
+          {
+            name = "Gonix Maintainer";
+            email = "gonix@example.com";
+            github = "gonix";
+            gitlab = "gonix-gl";
+            matrix = "@gonix:example.com";
+            keys = [{
+              fingerprint = "0123456789ABCDEF";
+              longkeyid = "89ABCDEF";
+            }];
+          }
+          "plain-maintainer"
+        ];
         out = {
           inherit type name drvPath;
           outPath = "/nix/store/11111111111111111111111111111111-demo";
@@ -577,6 +665,66 @@ func writePackageFlake(t *testing.T) string {
 	}
 
 	return "path:" + filepath.ToSlash(dir)
+}
+
+func writeMaintainerFlake(t *testing.T) string {
+	t.Helper()
+
+	return writeFlake(t, fmt.Sprintf(`{
+  outputs = { self }:
+    let
+      package = packageName: meta: rec {
+        type = "derivation";
+        name = packageName;
+        pname = packageName;
+        version = "1.0";
+        system = %q;
+        drvPath = "/nix/store/00000000000000000000000000000000-${packageName}.drv";
+        outPath = "/nix/store/11111111111111111111111111111111-${packageName}";
+        outputName = "out";
+        outputs = [ "out" ];
+        inherit meta;
+        out = {
+          inherit type name drvPath outPath outputName;
+        };
+      };
+    in {
+      packages.%q = {
+        valid = package "valid" {
+          maintainers = [{
+            name = "Valid Maintainer";
+            email = "valid@example.com";
+            github = "valid";
+            gitlab = "valid-gl";
+            matrix = "@valid:example.com";
+            keys = [{
+              fingerprint = "FEDCBA9876543210";
+              longkeyid = "76543210";
+            }];
+          }];
+        };
+        missing = package "missing" {};
+        missingAttr = package "missing-attr" {
+          maintainers = [ {}.missing ];
+        };
+        undefined = package "undefined" {
+          maintainers = with {}; [ undefinedMaintainer ];
+        };
+        thrown = package "thrown" {
+          maintainers = throw "broken maintainer list";
+        };
+        malformed = package "malformed" {
+          maintainers = [{
+            keys = [{
+              fingerprint = throw "malformed maintainer key";
+            }];
+          }];
+        };
+        coreBroken = package (throw "broken core package") {};
+      };
+    };
+}
+`, DefaultSystem(), DefaultSystem()))
 }
 
 func writeLegacyPackageFlake(t *testing.T) string {

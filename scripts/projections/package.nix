@@ -81,26 +81,6 @@ let
       }
     ) (asList license);
 
-  normalizeMaintainer = maintainer:
-    if builtins.isAttrs maintainer then {
-      name = asString (getAttr "name" "" maintainer);
-      email = asString (getAttr "email" "" maintainer);
-      github = asString (getAttr "github" "" maintainer);
-      gitlab = asString (getAttr "gitlab" "" maintainer);
-      matrix = asString (getAttr "matrix" "" maintainer);
-      keys = map (key: {
-        fingerprint = asString (getAttr "fingerprint" "" key);
-        longkeyid = asString (getAttr "longkeyid" "" key);
-      }) (asList (getAttr "keys" [] maintainer));
-    } else {
-      name = asString maintainer;
-      email = "";
-      github = "";
-      gitlab = "";
-      matrix = "";
-      keys = [];
-    };
-
   sourceProvenanceName = item:
     if builtins.isAttrs item then asString (getAttr "shortName" "" item) else asString item;
 
@@ -180,7 +160,6 @@ in {
       builtins.filter (item: item != "")
         (map sourceProvenanceName (asList (getAttr "sourceProvenance" [] meta)));
     license = normalizeLicense (getAttr "license" [] meta);
-    maintainers = map normalizeMaintainer (asList (getAttr "maintainers" [] meta));
     platforms = map parseSystem (asList (getAttr "platforms" [] meta));
     badPlatforms = map parseSystem (asList (getAttr "badPlatforms" [] meta));
   };
