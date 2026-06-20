@@ -19,18 +19,21 @@ if err != nil {
 }
 defer client.Close()
 
-f, err := client.NewFlake("github:NixOS/nixpkgs/nixos-unstable")
+f, err := client.OpenFlake("github:NixOS/nixpkgs/nixos-unstable")
 if err != nil {
 	return err
 }
 defer f.Close()
 
-var name string
-err = f.Output([]string{"packages", gonix.DefaultSystem(), "hello", "name"}, &name)
-
-packages, err := f.ListPackages()
-pkg, err := f.FetchPackage("hello")
-outputs, err := f.RealizePackage(pkg)
+var pkg struct {
+	Name    string `nix:"name" validate:"required"`
+	DrvPath string `nix:"drvPath" validate:"required"`
+}
+err = f.Output(
+	[]string{"legacyPackages", gonix.DefaultSystem(), "hello"},
+	&pkg,
+)
+outputs, err := client.Realize(pkg.DrvPath)
 ```
 
 ## Implementation status
@@ -66,11 +69,11 @@ composition.
   - [x] Flake reference parsing.
   - [x] Locked flake workflows.
   - [x] Generic typed locked-output access.
-- [ ] Nix package convenience API.
-  - [x] Fast top-level package listing.
-  - [x] Package metadata projection.
-  - [ ] Build/install metadata helpers.
-  - [x] Store-backed package realization helpers.
+- [ ] Package-manager workflows.
+  - [x] Generic flake output traversal.
+  - [x] Store-backed derivation realization.
+  - [ ] Package discovery, indexing, and metadata policy belong in a package
+        manager built on gonix.
 
 ## Evaluation and unmarshalling
 
@@ -110,7 +113,7 @@ string contexts, external values, interfaces or union types, arbitrary map key
 types, or custom decoder implementations. Advanced callers can use the
 lower-level `eval` package to work with caller-owned Nix values directly.
 
-## Flake outputs and packages
+## Flake outputs and realization
 
 `Flake.Output` traverses the output attributes of the locked flake and decodes
 the selected value into Go data:
@@ -118,7 +121,7 @@ the selected value into Go data:
 ```go
 var packageName string
 err := f.Output(
-	[]string{"packages", gonix.DefaultSystem(), "hello", "name"},
+	[]string{"legacyPackages", gonix.DefaultSystem(), "hello", "name"},
 	&packageName,
 )
 ```
@@ -127,25 +130,31 @@ Each path element is one exact attribute name, so an attribute containing a dot
 is addressed as a single slice element. An empty path decodes the complete
 flake output attribute set.
 
-`ListPackages` returns sorted top-level names from `packages.<system>` without
-forcing or decoding the individual package values:
+Advanced workflows can keep the selected output as a caller-owned
+`*eval.Value`:
 
 ```go
-packages, err := f.ListPackages()
-packages, err = f.ListPackages(gonix.WithListPackagesSystem("aarch64-linux"))
+value, err := f.OutputValue(
+	[]string{"legacyPackages", gonix.DefaultSystem(), "hello"},
+)
+defer value.Close()
+
+var pkg struct {
+	Name    string `nix:"name" validate:"required"`
+	DrvPath string `nix:"drvPath" validate:"required"`
+}
+err = client.Unmarshal(value, &pkg)
 ```
 
-The default system is the flake evaluator's `builtins.currentSystem`, cached
-when the Flake is constructed. Missing `packages` or system attributes produce
-an empty result. Listing is intentionally shallow: nested package sets appear
-as one top-level `PackageRef`.
+Every attribute lookup returns an independently referenced Nix value.
+`OutputValue` closes intermediate values during traversal and transfers
+ownership of only the final value to the caller. The value must be closed before
+its Client.
 
-`FetchPackage` is the normalized package convenience API for
-`packages.<system>` outputs. It intentionally does not fall back to
-`legacyPackages`. `RealizePackage` builds or substitutes the selected package
-and returns Go-owned `RealizedPackageOutput` values. Maintainers are projected
-independently as best-effort metadata, so malformed upstream maintainer entries
-produce an empty list without hiding failures in the core package projection.
+`Client.Realize` builds or substitutes every output of a derivation path and
+returns Go-owned `RealizedOutput` values. Gonix intentionally leaves package
+discovery, package metadata normalization, indexing, and policy to higher-level
+package managers.
 
 ## License
 

@@ -30,35 +30,29 @@ func main() {
 	}
 	fmt.Printf("evaluation=%+v\n", evaluation)
 
-	f, err := client.NewFlake("github:sund3RRR/tuxedo-nixos")
+	f, err := client.OpenFlake("github:NixOS/nixpkgs/nixos-unstable")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer f.Close() //nolint:errcheck
 
-	system := gonix.MakeSystem(gonix.OSLinux, gonix.ArchX86_64)
-
-	packages, err := f.ListPackages(gonix.WithListPackagesSystem(system))
+	system := gonix.DefaultSystem()
+	packageValue, err := f.OutputValue([]string{"legacyPackages", system, "hello"})
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("flake exposes %d top-level packages for %s: %+v\n", len(packages), system, packages)
+	defer packageValue.Close() //nolint:errcheck
 
-	packageAttr := "default"
-
-	var packageName string
-	if err := f.Output([]string{"packages", system, packageAttr, "name"}, &packageName); err != nil {
+	var pkg struct {
+		Name    string `nix:"name" validate:"required"`
+		DrvPath string `nix:"drvPath" validate:"required"`
+	}
+	if err := client.Unmarshal(packageValue, &pkg); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("flake package %s has name=%s\n", packageAttr, packageName)
+	fmt.Printf("package=%s drvPath=%s\n", pkg.Name, pkg.DrvPath)
 
-	pkg, err := f.FetchPackage(packageAttr, gonix.WithFetchPackageSystem(system))
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("package=%s version=%s\n", pkg.Name, pkg.Version)
-
-	outputs, err := f.RealizePackage(pkg)
+	outputs, err := client.Realize(pkg.DrvPath)
 	if err != nil {
 		log.Fatal(err)
 	}

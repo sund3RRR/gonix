@@ -7,16 +7,17 @@ import (
 
 	"github.com/sund3RRR/gonix/eval"
 	"github.com/sund3RRR/gonix/fetchers"
+	"github.com/sund3RRR/gonix/flake"
 	"github.com/sund3RRR/gonix/flakesettings"
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/nixcontext"
 	"github.com/sund3RRR/gonix/store"
 )
 
-// Client owns the resources for high-level flake workflows.
+// Client owns the resources for high-level Nix workflows.
 //
 // Client owns a hidden Nix context, a default store and evaluator, fetcher and
-// flake settings. Flakes created through NewFlake are caller-owned and must be
+// flake settings. Flakes created through OpenFlake are caller-owned and must be
 // closed before the Client. Client is not goroutine-safe. Close releases owned
 // resources in reverse dependency order.
 type Client struct {
@@ -83,15 +84,15 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 	return c, nil
 }
 
-// NewFlake parses and locks ref.
+// OpenFlake parses and locks ref.
 //
 // The returned Flake is owned by the caller and must be closed before c.
-func (c *Client) NewFlake(ref string, opts ...FlakeOption) (*Flake, error) {
+func (c *Client) OpenFlake(ref string, opts ...flake.Option) (*flake.Flake, error) {
 	if c.ctx == nil {
 		return nil, status.ErrClosed
 	}
 
-	f, err := NewFlake(c.ctx, c.fetcherSettings, c.flakeSettings, c.store, c.evaluator, ref, opts...)
+	f, err := flake.New(c.ctx, c.fetcherSettings, c.flakeSettings, c.evaluator, ref, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("client: failed to create flake: %w", err)
 	}
@@ -105,7 +106,7 @@ func (c *Client) NewFlake(ref string, opts ...FlakeOption) (*Flake, error) {
 // eval.Evaluator.Unmarshal. Use the eval package directly when the raw
 // caller-owned Value or a custom diagnostic path is needed.
 func (c *Client) Eval(expr string, out any) (err error) {
-	if c == nil || c.ctx == nil {
+	if c.ctx == nil {
 		return status.ErrClosed
 	}
 
@@ -113,16 +114,7 @@ func (c *Client) Eval(expr string, out any) (err error) {
 	if err != nil {
 		return fmt.Errorf("client: failed to evaluate expression: %w", err)
 	}
-	defer func() {
-		if closeErr := value.Close(); closeErr != nil {
-			closeErr = fmt.Errorf("client: failed to close evaluated value: %w", closeErr)
-			if err != nil {
-				err = errors.Join(err, closeErr)
-				return
-			}
-			err = closeErr
-		}
-	}()
+	defer value.Close() //nolint:errcheck
 
 	if err := c.evaluator.Unmarshal(value, out); err != nil {
 		return fmt.Errorf("client: failed to decode expression result: %w", err)
@@ -131,11 +123,78 @@ func (c *Client) Eval(expr string, out any) (err error) {
 	return nil
 }
 
+// Unmarshal decodes value into out using the Client's evaluator.
+//
+// Value must belong to this Client's evaluator. The out argument must be a
+// non-nil pointer to a type supported by eval.Evaluator.Unmarshal.
+func (c *Client) Unmarshal(value *eval.Value, out any) error {
+	if c.ctx == nil {
+		return status.ErrClosed
+	}
+
+	if err := c.evaluator.Unmarshal(value, out); err != nil {
+		return fmt.Errorf("client: failed to unmarshal eval.Value: %w", err)
+	}
+
+	return nil
+}
+
+// Realize realizes every output of the derivation at drvPath.
+//
+// Realize returns pure Go DTOs and closes the Nix store path handles produced
+// by Nix before returning. The Client's store must support realization.
+func (c *Client) Realize(drvPath string) ([]RealizedOutput, error) {
+	if c.ctx == nil {
+		return nil, status.ErrClosed
+	}
+
+	drvStorePath, err := c.store.ParsePath(drvPath)
+	if err != nil {
+		return nil, fmt.Errorf("client: failed to realize derivation: parse drv path: %w", err)
+	}
+	defer drvStorePath.Close() //nolint:errcheck
+
+	realizations, err := c.store.Realise(drvStorePath)
+	if err != nil {
+		return nil, fmt.Errorf("client: failed to realize derivation: realize store path: %w", err)
+	}
+	defer func() {
+		for i := range realizations {
+			_ = realizations[i].Close()
+		}
+	}()
+
+	outputs := make([]RealizedOutput, 0, len(realizations))
+	for i := range realizations {
+		realizedPath := realizations[i].Path
+		if realizedPath == nil {
+			return nil, fmt.Errorf("client: failed to realize derivation: realization %q has nil path", realizations[i].OutputName)
+		}
+
+		storePath := c.store.PrintPath(realizedPath.Hash(), realizedPath.Name())
+
+		realPath, err := c.store.RealPath(realizedPath)
+		if err != nil {
+			return nil, fmt.Errorf("client: failed to realize derivation: real output path %q: %w", realizations[i].OutputName, err)
+		}
+
+		outputs = append(outputs, RealizedOutput{
+			OutputName: realizations[i].OutputName,
+			StorePath:  storePath,
+			RealPath:   realPath,
+			Name:       realizedPath.Name(),
+			Hash:       realizedPath.Hash(),
+		})
+	}
+
+	return outputs, nil
+}
+
 // Close releases the evaluator, store, settings, and context.
 //
 // Close is idempotent. It attempts every cleanup and joins multiple errors.
 func (c *Client) Close() error {
-	if c == nil || c.ctx == nil {
+	if c.ctx == nil {
 		return nil
 	}
 

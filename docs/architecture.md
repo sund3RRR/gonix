@@ -23,9 +23,9 @@ already-owned Nix object, for example `storepath.New` and `Value.Borrow`.
 
 Every owned wrapper uses the API-specific lifecycle operation:
 `StoreFree`, `StorePathFree`, `DerivationFree`, `StateFree`, `ValueDecref`,
-`FlakeReferenceFree`, `LockedFlakeFree`, and corresponding settings free
-functions. Generated `.Free()` helpers are not a substitute for object-specific
-lifecycle APIs.
+`LockedFlakeFree`, and corresponding settings free functions. Temporary flake
+references are released during `flake.New`. Generated `.Free()` helpers are not
+a substitute for object-specific lifecycle APIs.
 
 ## Entrypoint model
 
@@ -37,15 +37,18 @@ lifecycle APIs.
 client, err := gonix.NewClient(gonix.ClientConfig{})
 defer client.Close()
 
-f, err := client.NewFlake("github:NixOS/nixpkgs/nixos-unstable")
+f, err := client.OpenFlake("github:NixOS/nixpkgs/nixos-unstable")
 defer f.Close()
 
-var name string
-err = f.Output([]string{"packages", gonix.DefaultSystem(), "hello", "name"}, &name)
-
-packages, err := f.ListPackages()
-pkg, err := f.FetchPackage("hello")
-outputs, err := f.RealizePackage(pkg)
+var pkg struct {
+    Name    string `nix:"name"`
+    DrvPath string `nix:"drvPath"`
+}
+err = f.Output(
+    []string{"legacyPackages", gonix.DefaultSystem(), "hello"},
+    &pkg,
+)
+outputs, err := client.Realize(pkg.DrvPath)
 
 var result int
 err = client.Eval("1 + 2", &result)
@@ -61,7 +64,7 @@ Client owns:
 - fetcher and flake settings;
 - one default Store and Evaluator.
 
-Every Flake returned by `Client.NewFlake` is caller-owned and must be closed
+Every Flake returned by `Client.OpenFlake` is caller-owned and must be closed
 before the Client. Client closes its evaluator, store, settings, and context in
 reverse dependency order.
 
@@ -73,10 +76,14 @@ custom diagnostic path use `eval.Evaluator`.
 locked flake output. Attribute paths are represented as string slices so every
 element names one exact Nix attribute without parsing or escaping rules.
 
-`Flake.ListPackages` enumerates sorted top-level names from
-`packages.<system>`. It forces only the output containers needed for traversal,
-not individual package values. Its default system is
-`builtins.currentSystem`, cached during Flake construction.
+`Flake.OutputValue` returns the final selected output as a caller-owned
+`eval.Value`. Each attribute getter creates an independent Nix reference, so
+the method closes intermediate values immediately while the returned value
+remains live. `Client.Unmarshal` decodes such a value using the Client's hidden
+evaluator.
+
+`Client.Realize` realizes a derivation store path and converts every resulting
+store path into a Go-owned `RealizedOutput`.
 
 ### Advanced composition
 
@@ -97,9 +104,9 @@ defer e.Close()
 owns only the raw Nix context and does not track children. Every child must be
 closed before its Context.
 
-The root `gonix.NewFlake` constructor is an advanced composition point. Its
-Context, settings, Store, and Evaluator arguments are borrowed, must belong to
-the same object graph, and must outlive the returned Flake.
+The `flake.New` constructor is an advanced composition point. Its Context,
+settings, and Evaluator arguments are borrowed, must belong to the same object
+graph, and must outlive the returned Flake.
 
 Lock metadata is not exposed yet. The public libflake C API can return evaluated
 outputs from a locked flake but cannot inspect its resolved reference or lock
@@ -135,14 +142,14 @@ General context settings live on `nixcontext.Context`, not Client:
 
 | Package | Public abstractions | Responsibility |
 | --- | --- | --- |
-| `gonix` | `Client`, `ClientConfig`, `Flake`, `Package` | Flake-first workflows, package projection, realization DTOs, resource orchestration. |
+| `gonix` | `Client`, `ClientConfig`, `RealizedOutput` | High-level evaluation, flake opening, realization, and resource orchestration. |
 | `nixcontext` | `Context`, `Config`, verbosity and log types | Nix context bootstrap, settings, raw context lifecycle. |
 | `storepath` | `Path` | Owned Nix store path handles. |
 | `store` | `Store`, `Derivation`, `DerivationData`, `Realization`, `Closure` | Store-backed paths, derivations, realization, closures, and copying. |
 | `eval` | `Evaluator`, `Value`, builders, realized strings | Evaluation states and values tied to an evaluator. |
 | `fetchers` | `Settings` | Fetcher settings lifecycle. |
 | `flakesettings` | `Settings` | Flake settings lifecycle and evaluator integration. |
-| `flake` | `Ref`, `LockedFlake` | Low-level flake parsing, locking, and output access. |
+| `flake` | `Flake`, `Option`, `LockMode` | Flake parsing, locking, output traversal, and locked-flake lifecycle. |
 | `internal/status` | `NixError`, `ErrorCode`, `ErrClosed` | Stable conversion of mutable Nix context errors. |
 | `pkg/utils` | `TakeCString`, `EncodeNix32` | Shared generated-binding and Nix representation adapters. |
 
@@ -161,7 +168,7 @@ Dependency direction is one-way:
 | --- | --- | --- | --- |
 | `nixcontext.Context` | `*nix.NixCContext` | owned lifetime root | `CContextFree` |
 | `gonix.Client` | composed resources | owns context, settings, store, evaluator | reverse dependency order |
-| `gonix.Flake` | reference, locked flake, projection values, cached current system | owned; borrows Client graph | closes projections, lock, reference |
+| `flake.Flake` | `*nix.NixLockedFlake` plus cached fragment | owned; borrows Context, settings, and Evaluator | `LockedFlakeFree` |
 | `store.Store` | `*nix.Store` plus cached metadata | owned; borrows Context | `StoreFree` |
 | `storepath.Path` | `*nix.StorePath` | owned or cloned | `StorePathFree` |
 | `store.Derivation` | `*nix.NixDerivation` plus cached JSON | owned or cloned | `DerivationFree` |
@@ -169,8 +176,6 @@ Dependency direction is one-way:
 | `eval.Value` | `*nix.NixValue` | caller-owned/refcounted; tied to Evaluator and borrows Context | `ValueDecref` |
 | `fetchers.Settings` | settings handle | owned; borrows Context | `FetchersSettingsFree` |
 | `flakesettings.Settings` | settings handle | owned; borrows Context | `FlakeSettingsFree` |
-| `flake.Ref` | reference handle | owned; borrows Context/settings | `FlakeReferenceFree` |
-| `flake.LockedFlake` | locked flake handle | owned; borrows evaluator/settings | `LockedFlakeFree` |
 
 ```mermaid
 flowchart TD
@@ -180,13 +185,12 @@ flowchart TD
     FlakeSettings["flakesettings.Settings"]
     Store["store.Store"]
     Eval["eval.Evaluator"]
-    Flake["gonix.Flake"]
-    Ref["flake.Ref"]
-    Lock["flake.LockedFlake"]
+    Flake["flake.Flake"]
+    LockedFlake["Nix locked flake"]
     Value["eval.Value"]
     Path["storepath.Path"]
     Derivation["store.Derivation"]
-    Package["gonix.Package / DTOs"]
+    Outputs["gonix.RealizedOutput DTOs"]
 
     Client -->|owns| Context
     Client -->|owns| Fetchers
@@ -201,16 +205,15 @@ flowchart TD
     Eval -->|borrows| Context
     Eval -->|borrows| Store
 
-    Flake -->|owns| Ref
-    Flake -->|owns| Lock
-    Flake -->|owns projection| Value
-    Flake -->|borrows| Store
+    Flake -->|owns| LockedFlake
     Flake -->|borrows| Eval
+    Flake -->|borrows| Context
+    Flake -->|creates| Value
 
     Eval -->|creates| Value
     Store -->|creates| Path
     Store -->|creates| Derivation
-    Flake -->|projects| Package
+    Client -->|returns| Outputs
 ```
 
 All Close methods are idempotent. Methods depending on a closed owned handle or
@@ -222,7 +225,7 @@ documented.
 
 Caller-owned resources must be closed before the resources they borrow:
 
-- every `gonix.Flake` returned by `Client.NewFlake` before its Client;
+- every `flake.Flake` returned by `Client.OpenFlake` before its Client;
 - every `eval.Value` before its Context, preferably before its Evaluator.
 
 Closing an Evaluator invalidates operations on its Values. Those Values may
@@ -242,17 +245,16 @@ still be closed after the Evaluator while their Context remains open.
 
 ## Public workflow boundaries
 
-- `Client.NewFlake` is the ordinary caller-owned constructor.
+- `Client.OpenFlake` is the ordinary caller-owned constructor.
 - `Client.Eval` evaluates and unmarshals an expression without exposing a raw
   Nix value.
-- `gonix.NewFlake` is the explicitly assembled advanced constructor.
+- `Client.Unmarshal` decodes a caller-owned value created by the Client's
+  evaluator.
+- `flake.New` is the explicitly assembled advanced constructor.
 - `Flake.Output(path, out)` traverses and unmarshals exact locked-output
   attributes.
-- `Flake.ListPackages(opts...)` lists sorted top-level names from
-  `packages.<system>` without decoding package values.
-- `Flake.FetchPackage(name, opts...)` selects and decodes a package for a
-  system from `packages.<system>`. Core package metadata is strict, while
-  maintainers are decoded by an isolated best-effort projection.
-- `Flake.RealizePackage(pkg)` realizes an already selected package.
-- Package and realized output results are Go-owned DTOs.
-- Low-level parsing and locking remain available through package `flake`.
+- `Flake.OutputValue(path)` returns a caller-owned final output value and closes
+  intermediate traversal values.
+- `Client.Realize(drvPath)` realizes a derivation path and returns Go-owned
+  output DTOs.
+- Package discovery, indexing, and metadata policy stay outside gonix.
