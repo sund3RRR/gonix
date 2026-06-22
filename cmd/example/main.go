@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,6 +11,8 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
+
 	client, err := gonix.NewClient(gonix.ClientConfig{
 		Verbosity: gonix.VerbosityInfo,
 		LogFormat: gonix.LogFormatBar,
@@ -26,7 +29,7 @@ func main() {
 		Message string `nix:"message" validate:"required"`
 		Answer  int    `nix:"answer" validate:"required"`
 	}
-	if err := client.Eval(`{ message = "hello from Nix"; answer = 6 * 7; }`, &evaluation); err != nil {
+	if err := client.Eval(ctx, `{ message = "hello from Nix"; answer = 6 * 7; }`, &evaluation); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf("evaluation=%+v\n", evaluation)
@@ -51,7 +54,7 @@ func main() {
 	fmt.Printf("flake_meta=%v\n", string(lockJSON))
 
 	system := gonix.DefaultSystem()
-	packageValue, err := f.OutputValue([]string{"legacyPackages", system, "hello"})
+	packageValue, err := client.GetFlakeOutputValue(ctx, f, []string{"legacyPackages", system, "hello"})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -61,15 +64,14 @@ func main() {
 		Name    string `nix:"name" validate:"required"`
 		DrvPath string `nix:"drvPath" validate:"required"`
 	}
-	if err := client.Unmarshal(packageValue, &pkg); err != nil {
+	if err := client.Unmarshal(ctx, packageValue, &pkg); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf("package=%s drvPath=%s\n", pkg.Name, pkg.DrvPath)
 
-	outputs, err := client.Realize(pkg.DrvPath)
+	outputs, err := client.Realize(ctx, pkg.DrvPath)
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	fmt.Printf("realized outputs=%+v\n", outputs)
 }

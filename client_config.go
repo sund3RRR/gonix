@@ -108,6 +108,8 @@ type ClientConfig struct {
 	Verbosity Verbosity
 	// LogFormat sets the Nix log format when non-empty.
 	LogFormat LogFormat
+	// LogSinkPath sets the Nix log sink destination.
+	LogSinkPath string
 	// ExperimentalFeatures replaces the default feature list when non-empty.
 	ExperimentalFeatures []string
 	// Substituters sets substituter store URLs when non-empty.

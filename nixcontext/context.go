@@ -189,6 +189,23 @@ func (c *Context) SetLogFormat(format LogFormat) error {
 	return nil
 }
 
+// SetLogSinkPath sets the Nix log sink destination.
+func (c *Context) SetLogSinkPath(destination string) error {
+	ptr, err := c.Borrow()
+	if err != nil {
+		return err
+	}
+	if destination == "" {
+		return nil
+	}
+
+	if code := nix.LogSinkInstall(ptr, destination); status.ErrorCode(code) != status.ErrorCodeOK {
+		return fmt.Errorf("nixcontext: failed to install log sink destination: %w", status.FromContext(ptr))
+	}
+
+	return nil
+}
+
 // Close releases the owned Nix context.
 //
 // Child resources must be closed before Close. Close is idempotent.

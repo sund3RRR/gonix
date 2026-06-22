@@ -1,6 +1,12 @@
 package gonix
 
-import "github.com/sund3RRR/gonix/internal/status"
+import (
+	"errors"
+
+	"github.com/sund3RRR/gonix/internal/status"
+)
+
+var ErrConcurrentUse = errors.New("gonix: concurrent use of Client is not supported")
 
 // ErrClosed is returned when an operation is attempted after a wrapper has been closed.
 var ErrClosed = status.ErrClosed
