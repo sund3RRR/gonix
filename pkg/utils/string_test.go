@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	raw "github.com/sund3RRR/nix-go-bindings"
+	"github.com/sund3RRR/gonix/pkg/raw"
 )
 
 func newTestContext(t *testing.T) *raw.NixCContext {

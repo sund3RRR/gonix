@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
+	"github.com/sund3RRR/gonix/pkg/raw"
 	"github.com/sund3RRR/gonix/pkg/utils"
-	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
 // EvalString evaluates a Nix expression string at path.
@@ -27,7 +27,7 @@ func (e *Evaluator) EvalString(expr, path string) (*Value, error) {
 		return nil, err
 	}
 
-	if code := nix.ExprEvalFromString(rawCtx, e.state, expr, path, value.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.ExprEvalFromString(rawCtx, e.state, expr, path, value.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 		_ = value.Close()
 		return nil, fmt.Errorf("eval: failed to evaluate string: %w", status.FromContext(rawCtx))
 	}
@@ -69,7 +69,7 @@ func (e *Evaluator) Force(v *Value) error {
 		return fmt.Errorf("eval: failed to validate value: %w", err)
 	}
 
-	if code := nix.ValueForce(rawCtx, e.state, v.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.ValueForce(rawCtx, e.state, v.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 		return fmt.Errorf("eval: failed to force value: %w", status.FromContext(rawCtx))
 	}
 
@@ -91,7 +91,7 @@ func (e *Evaluator) ForceDeep(v *Value) error {
 		return fmt.Errorf("eval: failed to validate value: %w", err)
 	}
 
-	if code := nix.ValueForceDeep(rawCtx, e.state, v.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.ValueForceDeep(rawCtx, e.state, v.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 		return fmt.Errorf("eval: failed to force value deeply: %w", status.FromContext(rawCtx))
 	}
 
@@ -122,7 +122,7 @@ func (e *Evaluator) Call(fn, arg *Value) (*Value, error) {
 		return nil, err
 	}
 
-	if code := nix.ValueCall(rawCtx, e.state, fn.ptr, arg.ptr, out.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.ValueCall(rawCtx, e.state, fn.ptr, arg.ptr, out.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 		_ = out.Close()
 		return nil, fmt.Errorf("eval: failed to call function: %w", status.FromContext(rawCtx))
 	}
@@ -145,12 +145,12 @@ func (e *Evaluator) CallMulti(fn *Value, args ...*Value) (*Value, error) {
 		return nil, fmt.Errorf("eval: failed to validate function value: %w", err)
 	}
 
-	items := make([]nix.ValueItem, len(args))
+	items := make([]raw.ValueItem, len(args))
 	for i, arg := range args {
 		if err := e.validateValue(arg); err != nil {
 			return nil, fmt.Errorf("eval: failed to validate argument value: %w", err)
 		}
-		items[i] = nix.ValueItem{Value: arg.ptr}
+		items[i] = raw.ValueItem{Value: arg.ptr}
 	}
 
 	out, err := e.allocValue()
@@ -158,12 +158,12 @@ func (e *Evaluator) CallMulti(fn *Value, args ...*Value) (*Value, error) {
 		return nil, err
 	}
 
-	valueArray := nix.ValueArray{
+	valueArray := raw.ValueArray{
 		Items: items,
 		Len:   uint64(len(items)),
 	}
 
-	if code := nix.ValueCallMulti(rawCtx, e.state, fn.ptr, valueArray, out.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.ValueCallMulti(rawCtx, e.state, fn.ptr, valueArray, out.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 		_ = out.Close()
 		return nil, fmt.Errorf("eval: failed to call function with arguments: %w", status.FromContext(rawCtx))
 	}
@@ -186,7 +186,7 @@ func (e *Evaluator) Index(v *Value, index uint32) (*Value, error) {
 		return nil, fmt.Errorf("eval: failed to validate value: %w", err)
 	}
 
-	child := nix.GetListByidx(rawCtx, v.ptr, e.state, index)
+	child := raw.GetListByidx(rawCtx, v.ptr, e.state, index)
 	if child == nil {
 		return nil, fmt.Errorf("eval: failed to get list item %d: %w", index, status.FromContext(rawCtx))
 	}
@@ -214,7 +214,7 @@ func (e *Evaluator) Attr(v *Value, name string) (*Value, error) {
 		return nil, fmt.Errorf("eval: failed to validate value: %w", err)
 	}
 
-	child := nix.GetAttrByname(rawCtx, v.ptr, e.state, name)
+	child := raw.GetAttrByname(rawCtx, v.ptr, e.state, name)
 	if child == nil {
 		return nil, fmt.Errorf("eval: failed to get attr %q: %w", name, status.FromContext(rawCtx))
 	}
@@ -253,14 +253,14 @@ func (e *Evaluator) AttrLazy(v *Value, name string) (*Value, error) {
 		return nil, &ValueTypeError{Actual: typ, Expected: ValueTypeAttrs}
 	}
 
-	child := nix.GetAttrBynameLazy(rawCtx, v.ptr, e.state, name)
+	child := raw.GetAttrBynameLazy(rawCtx, v.ptr, e.state, name)
 	if child == nil {
 		return nil, fmt.Errorf("eval: failed to get lazy attr %q: %w", name, status.FromContext(rawCtx))
 	}
 
 	value, err := e.WrapValue(child)
 	if err != nil {
-		if code := nix.ValueDecref(rawCtx, child); status.ErrorCode(code) != status.ErrorCodeOK {
+		if code := raw.ValueDecref(rawCtx, child); status.ErrorCode(code) != status.ErrorCodeOK {
 			return nil, fmt.Errorf("eval: failed to wrap lazy attr %q and decref value: %w", name, status.FromContext(rawCtx))
 		}
 		return nil, fmt.Errorf("eval: failed to wrap lazy attr %q: %w", name, err)
@@ -284,7 +284,7 @@ func (e *Evaluator) AttrByIndex(v *Value, index uint32) (*Value, error) {
 		return nil, fmt.Errorf("eval: failed to validate value: %w", err)
 	}
 
-	child := nix.GetAttrByidx(rawCtx, v.ptr, e.state, index)
+	child := raw.GetAttrByidx(rawCtx, v.ptr, e.state, index)
 	if child == nil {
 		return nil, fmt.Errorf("eval: failed to get attr by index %d: %w", index, status.FromContext(rawCtx))
 	}
@@ -312,7 +312,7 @@ func (e *Evaluator) AttrName(v *Value, index uint32) (string, error) {
 		return "", fmt.Errorf("eval: failed to validate value: %w", err)
 	}
 
-	name := nix.GetAttrNameByidx(rawCtx, v.ptr, e.state, index)
+	name := raw.GetAttrNameByidx(rawCtx, v.ptr, e.state, index)
 	if name == nil {
 		return "", fmt.Errorf("eval: failed to get attr name by index %d: %w", index, status.FromContext(rawCtx))
 	}
@@ -335,7 +335,7 @@ func (e *Evaluator) HasAttr(v *Value, name string) (bool, error) {
 		return false, fmt.Errorf("eval: failed to validate value: %w", err)
 	}
 
-	got := nix.HasAttrByname(rawCtx, v.ptr, e.state, name)
+	got := raw.HasAttrByname(rawCtx, v.ptr, e.state, name)
 	if err := status.FromContext(rawCtx); err != nil {
 		return false, fmt.Errorf("eval: failed to check attr %q: %w", name, err)
 	}

@@ -6,8 +6,8 @@ import (
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/nixcontext"
+	"github.com/sund3RRR/gonix/pkg/raw"
 	"github.com/sund3RRR/gonix/pkg/utils"
-	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
 // DerivationData is the Go representation of Nix derivation JSON.
@@ -63,7 +63,7 @@ type DerivationInput struct {
 // closure.
 type Derivation struct {
 	ctx  *nixcontext.Context
-	ptr  *nix.NixDerivation
+	ptr  *raw.NixDerivation
 	json []byte
 }
 
@@ -72,20 +72,20 @@ type Derivation struct {
 // NewDerivation takes ownership of ptr, caches its Nix-normalized JSON, and
 // releases ptr if initialization fails. A nil ptr is rejected. The ctx argument
 // is borrowed and must remain valid for operations requiring the raw handle.
-func NewDerivation(ctx *nixcontext.Context, ptr *nix.NixDerivation) (*Derivation, error) {
+func NewDerivation(ctx *nixcontext.Context, ptr *raw.NixDerivation) (*Derivation, error) {
 	if ptr == nil {
 		return nil, fmt.Errorf("derivation: nil raw derivation")
 	}
 
 	rawCtx, err := ctx.Borrow()
 	if err != nil {
-		nix.DerivationFree(ptr)
+		raw.DerivationFree(ptr)
 		return nil, fmt.Errorf("derivation: failed to borrow context: %w", err)
 	}
 
-	rawJSON := nix.DerivationToJson(rawCtx, ptr)
+	rawJSON := raw.DerivationToJson(rawCtx, ptr)
 	if rawJSON == nil {
-		nix.DerivationFree(ptr)
+		raw.DerivationFree(ptr)
 		if err := status.FromContext(rawCtx); err != nil {
 			return nil, fmt.Errorf("derivation: failed to serialize to json: %w", err)
 		}
@@ -132,7 +132,7 @@ func (d *Derivation) Clone() (*Derivation, error) {
 		return nil, fmt.Errorf("derivation: failed to borrow context: %w", err)
 	}
 
-	clone := nix.DerivationClone(d.ptr)
+	clone := raw.DerivationClone(d.ptr)
 	if clone == nil {
 		return nil, fmt.Errorf("derivation: failed to clone derivation: %w", status.FromContext(rawCtx))
 	}
@@ -150,7 +150,7 @@ func (d *Derivation) Clone() (*Derivation, error) {
 // Callers must not free the returned pointer and must not retain it beyond the
 // immediate raw Nix call that needs it. This is an escape hatch for integration
 // with lower-level bindings.
-func (d *Derivation) Borrow() (*nix.NixDerivation, error) {
+func (d *Derivation) Borrow() (*raw.NixDerivation, error) {
 	if d.ptr == nil {
 		return nil, status.ErrClosed
 	}
@@ -167,7 +167,7 @@ func (d *Derivation) Close() error {
 		return nil
 	}
 
-	nix.DerivationFree(d.ptr)
+	raw.DerivationFree(d.ptr)
 	d.ptr = nil
 
 	return nil

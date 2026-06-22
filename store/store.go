@@ -13,9 +13,9 @@ import (
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/nixcontext"
+	"github.com/sund3RRR/gonix/pkg/raw"
 	"github.com/sund3RRR/gonix/pkg/utils"
 	"github.com/sund3RRR/gonix/storepath"
-	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
 // Store is an open Nix store backend.
@@ -35,7 +35,7 @@ type Store struct {
 	storeDir string
 	version  string
 	ctx      *nixcontext.Context
-	ptr      *nix.Store
+	ptr      *raw.Store
 }
 
 // New opens a Nix store using an already-initialized Nix context.
@@ -65,9 +65,9 @@ func New(ctx *nixcontext.Context, uri string, opts ...Option) (*Store, error) {
 		return nil, fmt.Errorf("store: failed to convert config to params: %w", err)
 	}
 
-	items := make([]nix.StoreParam, 0, len(params))
+	items := make([]raw.StoreParam, 0, len(params))
 	for k, v := range params {
-		items = append(items, nix.StoreParam{
+		items = append(items, raw.StoreParam{
 			Key:      []byte(k),
 			KeyLen:   uint64(len(k)),
 			Value:    []byte(v),
@@ -75,7 +75,7 @@ func New(ctx *nixcontext.Context, uri string, opts ...Option) (*Store, error) {
 		})
 	}
 
-	storeParams := nix.StoreParams{
+	storeParams := raw.StoreParams{
 		Items: items,
 		Len:   uint64(len(items)),
 	}
@@ -85,14 +85,14 @@ func New(ctx *nixcontext.Context, uri string, opts ...Option) (*Store, error) {
 		defer storeParams.Free()
 	}
 
-	ptr := nix.StoreOpen(rawCtx, uri, storeParams)
+	ptr := raw.StoreOpen(rawCtx, uri, storeParams)
 	if ptr == nil {
 		return nil, fmt.Errorf("store: failed to open store: %w", status.FromContext(rawCtx))
 	}
 
-	uriPtr := nix.StoreGetUri(rawCtx, ptr)
+	uriPtr := raw.StoreGetUri(rawCtx, ptr)
 	if uriPtr == nil {
-		nix.StoreFree(ptr)
+		raw.StoreFree(ptr)
 		if err := status.FromContext(rawCtx); err != nil {
 			return nil, fmt.Errorf("store: failed to get uri: %w", err)
 		}
@@ -100,9 +100,9 @@ func New(ctx *nixcontext.Context, uri string, opts ...Option) (*Store, error) {
 	}
 	canonicalURI := utils.TakeCString(uriPtr)
 
-	storeDirPtr := nix.StoreGetStoredir(rawCtx, ptr)
+	storeDirPtr := raw.StoreGetStoredir(rawCtx, ptr)
 	if storeDirPtr == nil {
-		nix.StoreFree(ptr)
+		raw.StoreFree(ptr)
 		if err := status.FromContext(rawCtx); err != nil {
 			return nil, fmt.Errorf("store: failed to get store dir: %w", err)
 		}
@@ -110,9 +110,9 @@ func New(ctx *nixcontext.Context, uri string, opts ...Option) (*Store, error) {
 	}
 	storeDir := utils.TakeCString(storeDirPtr)
 
-	versionPtr := nix.StoreGetVersion(rawCtx, ptr)
+	versionPtr := raw.StoreGetVersion(rawCtx, ptr)
 	if versionPtr == nil {
-		nix.StoreFree(ptr)
+		raw.StoreFree(ptr)
 		if err := status.FromContext(rawCtx); err != nil {
 			return nil, fmt.Errorf("store: failed to get version: %w", err)
 		}
@@ -170,7 +170,7 @@ func (s *Store) StoreDir() string {
 // immediate raw Nix call that needs it. This is an escape hatch for integration
 // with lower-level bindings and should not be needed for ordinary store
 // workflows.
-func (p *Store) Borrow() (*nix.Store, error) {
+func (p *Store) Borrow() (*raw.Store, error) {
 	if p.ptr == nil {
 		return nil, status.ErrClosed
 	}
@@ -187,7 +187,7 @@ func (s *Store) Close() error {
 		return nil
 	}
 
-	nix.StoreFree(s.ptr)
+	raw.StoreFree(s.ptr)
 	s.ptr = nil
 
 	return nil
@@ -208,14 +208,14 @@ func (s *Store) ParsePath(pathStr string) (*storepath.Path, error) {
 		return nil, fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
-	ptr := nix.StoreParsePath(rawCtx, s.ptr, pathStr)
+	ptr := raw.StoreParsePath(rawCtx, s.ptr, pathStr)
 	if ptr == nil {
 		return nil, fmt.Errorf("store: failed to parse path: %w", status.FromContext(rawCtx))
 	}
 
 	path, err := storepath.New(s.ctx, ptr)
 	if err != nil {
-		nix.StorePathFree(ptr)
+		raw.StorePathFree(ptr)
 		return nil, fmt.Errorf("store: failed to create store path: %w", err)
 	}
 
@@ -237,7 +237,7 @@ func (s *Store) PathFromHash(hashPart []byte) (*storepath.Path, error) {
 		return nil, fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
-	ptr := nix.StoreQueryPathFromHashPart(rawCtx, s.ptr, string(hashPart))
+	ptr := raw.StoreQueryPathFromHashPart(rawCtx, s.ptr, string(hashPart))
 	if ptr == nil {
 		if err := status.FromContext(rawCtx); err != nil {
 			return nil, fmt.Errorf("store: failed to get path from hash: %w", err)
@@ -247,7 +247,7 @@ func (s *Store) PathFromHash(hashPart []byte) (*storepath.Path, error) {
 
 	path, err := storepath.New(s.ctx, ptr)
 	if err != nil {
-		nix.StorePathFree(ptr)
+		raw.StorePathFree(ptr)
 		return nil, fmt.Errorf("store: failed to create store path: %w", err)
 	}
 
@@ -274,7 +274,7 @@ func (s *Store) RealPath(path *storepath.Path) (string, error) {
 		return "", fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	ptr := nix.StoreRealPath(rawCtx, s.ptr, pathPtr)
+	ptr := raw.StoreRealPath(rawCtx, s.ptr, pathPtr)
 	if ptr == nil {
 		return "", fmt.Errorf("store: failed to get real path: %w", status.FromContext(rawCtx))
 	}
@@ -302,7 +302,7 @@ func (s *Store) IsValidPath(path *storepath.Path) (bool, error) {
 		return false, fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	valid := nix.StoreIsValidPath(rawCtx, s.ptr, pathPtr)
+	valid := raw.StoreIsValidPath(rawCtx, s.ptr, pathPtr)
 	if err := status.FromContext(rawCtx); err != nil {
 		return false, fmt.Errorf("store: failed to check path validity: %w", err)
 	}

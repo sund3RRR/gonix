@@ -7,7 +7,7 @@ import (
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/nixcontext"
-	nix "github.com/sund3RRR/nix-go-bindings"
+	"github.com/sund3RRR/gonix/pkg/raw"
 )
 
 const (
@@ -31,7 +31,7 @@ func newTestContext(t *testing.T) *nixcontext.Context {
 	return ctx
 }
 
-func newTestStore(t *testing.T, ctx *nixcontext.Context) *nix.Store {
+func newTestStore(t *testing.T, ctx *nixcontext.Context) *raw.Store {
 	t.Helper()
 
 	rawCtx, err := ctx.Borrow()
@@ -39,25 +39,25 @@ func newTestStore(t *testing.T, ctx *nixcontext.Context) *nix.Store {
 		t.Fatalf("Context.Borrow() error = %v", err)
 	}
 
-	store := nix.StoreOpen(rawCtx, "dummy://", nix.StoreParams{})
+	store := raw.StoreOpen(rawCtx, "dummy://", raw.StoreParams{})
 	if store == nil {
 		t.Fatalf("StoreOpen(dummy://) returned nil: err=%v", statusMessage(rawCtx))
 	}
 	t.Cleanup(func() {
-		nix.StoreFree(store)
+		raw.StoreFree(store)
 	})
 
 	return store
 }
 
-func parseRawPath(t *testing.T, ctx *nixcontext.Context, store *nix.Store, rawPath string) *nix.StorePath {
+func parseRawPath(t *testing.T, ctx *nixcontext.Context, store *raw.Store, rawPath string) *raw.StorePath {
 	t.Helper()
 
 	rawCtx, err := ctx.Borrow()
 	if err != nil {
 		t.Fatalf("Context.Borrow() error = %v", err)
 	}
-	ptr := nix.StoreParsePath(rawCtx, store, rawPath)
+	ptr := raw.StoreParsePath(rawCtx, store, rawPath)
 	if ptr == nil {
 		t.Fatalf("StoreParsePath(%q) returned nil: err=%v", rawPath, statusMessage(rawCtx))
 	}
@@ -65,7 +65,7 @@ func parseRawPath(t *testing.T, ctx *nixcontext.Context, store *nix.Store, rawPa
 	return ptr
 }
 
-func newTestPath(t *testing.T, ctx *nixcontext.Context, store *nix.Store, rawPath string) *Path {
+func newTestPath(t *testing.T, ctx *nixcontext.Context, store *raw.Store, rawPath string) *Path {
 	t.Helper()
 
 	path, err := New(ctx, parseRawPath(t, ctx, store, rawPath))
@@ -81,15 +81,15 @@ func newTestPath(t *testing.T, ctx *nixcontext.Context, store *nix.Store, rawPat
 	return path
 }
 
-func statusMessage(ctx *nix.NixCContext) string {
+func statusMessage(ctx *raw.NixCContext) string {
 	if ctx == nil {
 		return ""
 	}
-	ptr := nix.ErrMsg(nil, ctx)
+	ptr := raw.ErrMsg(nil, ctx)
 	if ptr == nil {
 		return ""
 	}
-	defer nix.StringFree(ptr)
+	defer raw.StringFree(ptr)
 
 	var msg []byte
 	for p := ptr; *p != 0; p = (*byte)(unsafeAdd(p, 1)) {

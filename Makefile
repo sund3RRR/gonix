@@ -1,16 +1,18 @@
 NIX_CONFIG ?= extra-experimental-features = nix-command flakes
 export NIX_CONFIG
 
-NIX_DEV_SHELL ?= github:sund3RRR/nix-go-bindings
+NIX_DEV_SHELL ?= path:.
 NIX_DEVELOP = nix develop $(NIX_DEV_SHELL) --command
 
-.PHONY: deps test lint
+.PHONY: generate test lint check
 
-deps:
-	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+generate:
+	nix run path:.#generate-go-bindings
 
 test:
 	$(NIX_DEVELOP) go test -v -cover -race -count=1 ./...
 
 lint:
 	$(NIX_DEVELOP) golangci-lint run
+
+check: test lint

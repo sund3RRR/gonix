@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
+	"github.com/sund3RRR/gonix/pkg/raw"
 	"github.com/sund3RRR/gonix/storepath"
-	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
 // CopyConfig configures copying a store path between stores.
@@ -61,7 +61,7 @@ func (s *Store) CopyClosure(dst *Store, path *storepath.Path) error {
 		return fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	if code := nix.StoreCopyClosure(rawCtx, s.ptr, dstPtr, pathPtr); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.StoreCopyClosure(rawCtx, s.ptr, dstPtr, pathPtr); status.ErrorCode(code) != status.ErrorCodeOK {
 		return fmt.Errorf("store: failed to copy closure: %w", status.FromContext(rawCtx))
 	}
 
@@ -98,7 +98,7 @@ func (s *Store) CopyPathTo(dst *Store, path *storepath.Path, opts ...CopyOption)
 		return fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	if code := nix.StoreCopyPath(rawCtx, s.ptr, dstPtr, pathPtr, cfg.Repair, cfg.CheckSignatures); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.StoreCopyPath(rawCtx, s.ptr, dstPtr, pathPtr, cfg.Repair, cfg.CheckSignatures); status.ErrorCode(code) != status.ErrorCodeOK {
 		return fmt.Errorf("store: copy path: %w", status.FromContext(rawCtx))
 	}
 

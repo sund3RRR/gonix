@@ -9,8 +9,8 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
+	"github.com/sund3RRR/gonix/pkg/raw"
 	"github.com/sund3RRR/gonix/pkg/utils"
-	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
 // Config configures Context creation.
@@ -65,12 +65,12 @@ const (
 // Context is not goroutine-safe. Resources created with a Context borrow it and
 // must be closed before the Context. Close is idempotent.
 type Context struct {
-	ptr *nix.NixCContext
+	ptr *raw.NixCContext
 }
 
 // New creates a Nix context and initializes libutil, libstore, and libexpr.
 func New(cfg Config) (*Context, error) {
-	ptr := nix.CContextCreate()
+	ptr := raw.CContextCreate()
 	if ptr == nil {
 		return nil, fmt.Errorf("nixcontext: create context")
 	}
@@ -83,21 +83,21 @@ func New(cfg Config) (*Context, error) {
 		}
 	}()
 
-	if code := nix.LibutilInit(ptr); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.LibutilInit(ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 		err = status.FromContext(ptr)
 		return nil, fmt.Errorf("nixcontext: initialize util library: %w", err)
 	}
 
-	libstoreInit := nix.LibstoreInitNoLoadConfig
+	libstoreInit := raw.LibstoreInitNoLoadConfig
 	if cfg.LoadConfig {
-		libstoreInit = nix.LibstoreInit
+		libstoreInit = raw.LibstoreInit
 	}
 	if code := libstoreInit(ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 		err = status.FromContext(ptr)
 		return nil, fmt.Errorf("nixcontext: initialize store library: %w", err)
 	}
 
-	if code := nix.LibexprInit(ptr); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.LibexprInit(ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 		err = status.FromContext(ptr)
 		return nil, fmt.Errorf("nixcontext: initialize expression library: %w", err)
 	}
@@ -110,7 +110,7 @@ func New(cfg Config) (*Context, error) {
 // Callers must not free the returned pointer and must not retain it beyond the
 // immediate raw Nix call that needs it. Borrow returns status.ErrClosed after
 // Close.
-func (c *Context) Borrow() (*nix.NixCContext, error) {
+func (c *Context) Borrow() (*raw.NixCContext, error) {
 	if c.ptr == nil {
 		return nil, status.ErrClosed
 	}
@@ -125,7 +125,7 @@ func (c *Context) Setting(key string) (string, error) {
 		return "", err
 	}
 
-	value := nix.SettingGet(ptr, key)
+	value := raw.SettingGet(ptr, key)
 	if value == nil {
 		return "", fmt.Errorf("nixcontext: failed to get setting %q: %w", key, status.FromContext(ptr))
 	}
@@ -140,7 +140,7 @@ func (c *Context) SetSetting(key, value string) error {
 		return err
 	}
 
-	if code := nix.SettingSet(ptr, key, value); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.SettingSet(ptr, key, value); status.ErrorCode(code) != status.ErrorCodeOK {
 		return fmt.Errorf("nixcontext: failed to set setting %q: %w", key, status.FromContext(ptr))
 	}
 
@@ -162,8 +162,8 @@ func (c *Context) SetVerbosity(level Verbosity) error {
 		return fmt.Errorf("nixcontext: invalid verbosity %d", level)
 	}
 
-	rawLevel := nix.NixVerbosity(level - VerbosityError)
-	if code := nix.SetVerbosity(ptr, rawLevel); status.ErrorCode(code) != status.ErrorCodeOK {
+	rawLevel := raw.NixVerbosity(level - VerbosityError)
+	if code := raw.SetVerbosity(ptr, rawLevel); status.ErrorCode(code) != status.ErrorCodeOK {
 		return fmt.Errorf("nixcontext: failed to set verbosity: %w", status.FromContext(ptr))
 	}
 
@@ -182,7 +182,7 @@ func (c *Context) SetLogFormat(format LogFormat) error {
 		return nil
 	}
 
-	if code := nix.SetLogFormat(ptr, string(format)); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.SetLogFormat(ptr, string(format)); status.ErrorCode(code) != status.ErrorCodeOK {
 		return fmt.Errorf("nixcontext: failed to set log format: %w", status.FromContext(ptr))
 	}
 
@@ -199,7 +199,7 @@ func (c *Context) SetLogSinkPath(destination string) error {
 		return nil
 	}
 
-	if code := nix.LogSinkInstall(ptr, destination); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.LogSinkInstall(ptr, destination); status.ErrorCode(code) != status.ErrorCodeOK {
 		return fmt.Errorf("nixcontext: failed to install log sink destination: %w", status.FromContext(ptr))
 	}
 
@@ -214,7 +214,7 @@ func (c *Context) Close() error {
 		return nil
 	}
 
-	nix.CContextFree(c.ptr)
+	raw.CContextFree(c.ptr)
 	c.ptr = nil
 
 	return nil

@@ -1,8 +1,8 @@
 # gonix architecture
 
-`gonix` is a high-level Go SDK over
-`github.com/sund3RRR/nix-go-bindings`, the generated bridge to the Nix C API and
-narrow binding-owned adapters.
+`gonix` is a high-level Go SDK over its bundled
+`github.com/sund3RRR/gonix/pkg/raw` package, the generated bridge to the Nix C
+API and narrow binding-owned adapters.
 
 The SDK has two entry layers:
 
@@ -10,17 +10,19 @@ The SDK has two entry layers:
 - `nixcontext.Context` plus the public subpackages are the composable advanced
   API.
 
-## Boundary with nix-go-bindings
+## Boundary with pkg/raw
 
-`nix-go-bindings` is the only gateway to Nix. Gonix must not duplicate
-generated bindings, call private Nix C++ APIs, add ad hoc cgo, or shell out to
-the `nix` CLI for core SDK behavior.
+`pkg/raw` is the only gateway to Nix. High-level gonix packages must not
+duplicate generated bindings, call private Nix C++ APIs, add ad hoc cgo, or
+shell out to the `nix` CLI for core SDK behavior.
 
-`nix-go-bindings v0.3.0` owns narrow C++ adapters for callback-free store
-results and resolved flake data. Store GC root discovery and garbage collection
-return opaque result handles. Flake adapters provide resolved lock JSON and
-Nix's locked-flake fingerprint. Gonix consumes only the generated Go functions
-and does not depend on private Nix headers directly.
+`pkg/raw` contains the generated Go package, C/C++ shims, generator
+configuration, and low-level tests. Its narrow C++ adapters provide
+callback-free store results and resolved flake data. Store GC root discovery
+and garbage collection return opaque result handles. Flake adapters provide
+resolved lock JSON and Nix's locked-flake fingerprint. High-level gonix code
+consumes only the generated Go functions and does not depend on private Nix
+headers directly.
 
 Raw generated context pointers never cross public constructor boundaries.
 Public constructors receive `*nixcontext.Context`. Narrow integration points
@@ -162,6 +164,7 @@ General context settings live on `nixcontext.Context`, not Client:
 | Package | Public abstractions | Responsibility |
 | --- | --- | --- |
 | `gonix` | `Client`, `ClientConfig`, `RealizedOutput` | High-level evaluation, flake opening, realization, and resource orchestration. |
+| `pkg/raw` | Generated Nix C API types and functions | Sole low-level Nix boundary, C/C++ shims, and generated bindings. |
 | `nixcontext` | `Context`, `Config`, verbosity and log types | Nix context bootstrap, settings, raw context lifecycle. |
 | `storepath` | `Path` | Owned Nix store path handles. |
 | `store` | `Store`, `Derivation`, `DerivationData`, `Realization`, `Closure`, `GCRoot`, `GCResult` | Store-backed paths, derivations, realization, closures, GC roots and collection, and copying. |
@@ -175,6 +178,8 @@ General context settings live on `nixcontext.Context`, not Client:
 Dependency direction is one-way:
 
 - root `gonix` imports `nixcontext` and public subpackages;
+- high-level packages may import `pkg/raw`, but `pkg/raw` never imports
+  high-level gonix packages;
 - public subpackages may import `nixcontext`;
 - `store` may import `storepath`;
 - `eval` may import `store`, `storepath`, and `flakesettings`;
@@ -185,19 +190,20 @@ Dependency direction is one-way:
 
 | Type | Raw object | Ownership | Close operation |
 | --- | --- | --- | --- |
-| `nixcontext.Context` | `*nix.NixCContext` | owned lifetime root | `CContextFree` |
+| `nixcontext.Context` | `*raw.NixCContext` | owned lifetime root | `CContextFree` |
 | `gonix.Client` | composed resources | owns context, settings, store, evaluator | reverse dependency order |
-| `flake.Flake` | `*nix.NixLockedFlake` plus cached fragment, lock graph, and fingerprint | owned; borrows Context, flake settings, and Evaluator; borrows Store and fetcher settings during construction | `LockedFlakeFree` |
-| `store.Store` | `*nix.Store` plus cached metadata | owned; borrows Context | `StoreFree` |
-| `storepath.Path` | `*nix.StorePath` | owned or cloned | `StorePathFree` |
-| `store.Derivation` | `*nix.NixDerivation` plus cached JSON | owned or cloned | `DerivationFree` |
-| `eval.Evaluator` | `*nix.EvalState` | owned; borrows Store and Context | `StateFree` |
-| `eval.Value` | `*nix.NixValue` | caller-owned/refcounted; tied to Evaluator and borrows Context | `ValueDecref` |
+| `flake.Flake` | `*raw.NixLockedFlake` plus cached fragment, lock graph, and fingerprint | owned; borrows Context, flake settings, and Evaluator; borrows Store and fetcher settings during construction | `LockedFlakeFree` |
+| `store.Store` | `*raw.Store` plus cached metadata | owned; borrows Context | `StoreFree` |
+| `storepath.Path` | `*raw.StorePath` | owned or cloned | `StorePathFree` |
+| `store.Derivation` | `*raw.NixDerivation` plus cached JSON | owned or cloned | `DerivationFree` |
+| `eval.Evaluator` | `*raw.EvalState` | owned; borrows Store and Context | `StateFree` |
+| `eval.Value` | `*raw.NixValue` | caller-owned/refcounted; tied to Evaluator and borrows Context | `ValueDecref` |
 | `fetchers.Settings` | settings handle | owned; borrows Context | `FetchersSettingsFree` |
 | `flakesettings.Settings` | settings handle | owned; borrows Context | `FlakeSettingsFree` |
 
 ```mermaid
 flowchart TD
+    Raw["pkg/raw\nNix C API gateway"]
     Context["nixcontext.Context\nowns Nix context"]
     Client["gonix.Client\nquick-start owner"]
     Fetchers["fetchers.Settings"]
@@ -210,6 +216,13 @@ flowchart TD
     Path["storepath.Path"]
     Derivation["store.Derivation"]
     Outputs["gonix.RealizedOutput DTOs"]
+
+    Context -->|calls| Raw
+    Fetchers -->|calls| Raw
+    FlakeSettings -->|calls| Raw
+    Store -->|calls| Raw
+    Eval -->|calls| Raw
+    Flake -->|calls| Raw
 
     Client -->|owns| Context
     Client -->|owns| Fetchers

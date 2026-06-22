@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/sund3RRR/gonix/internal/status"
+	"github.com/sund3RRR/gonix/pkg/raw"
 	"github.com/sund3RRR/gonix/storepath"
-	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
 // DerivationFromJSON imports a Nix derivation from JSON.
@@ -23,7 +23,7 @@ func (s *Store) DerivationFromJSON(data []byte) (*Derivation, error) {
 		return nil, fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
-	ptr := nix.DerivationFromJson(rawCtx, s.ptr, string(data))
+	ptr := raw.DerivationFromJson(rawCtx, s.ptr, string(data))
 	if ptr == nil {
 		return nil, fmt.Errorf("store: failed to import derivation from json: %w", status.FromContext(rawCtx))
 	}
@@ -55,7 +55,7 @@ func (s *Store) DerivationFromPath(path *storepath.Path) (*Derivation, error) {
 		return nil, fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	ptr := nix.StoreDrvFromStorePath(rawCtx, s.ptr, pathPtr)
+	ptr := raw.StoreDrvFromStorePath(rawCtx, s.ptr, pathPtr)
 	if ptr == nil {
 		return nil, fmt.Errorf("store: failed to load derivation from path: %w", status.FromContext(rawCtx))
 	}
@@ -87,14 +87,14 @@ func (s *Store) AddDerivation(d *Derivation) (*storepath.Path, error) {
 		return nil, fmt.Errorf("store: failed to borrow derivation: %w", err)
 	}
 
-	ptr := nix.AddDerivation(rawCtx, s.ptr, drvPtr)
+	ptr := raw.AddDerivation(rawCtx, s.ptr, drvPtr)
 	if ptr == nil {
 		return nil, fmt.Errorf("store: failed to add derivation: %w", status.FromContext(rawCtx))
 	}
 
 	path, err := storepath.New(s.ctx, ptr)
 	if err != nil {
-		nix.StorePathFree(ptr)
+		raw.StorePathFree(ptr)
 		return nil, fmt.Errorf("store: failed to create store path: %w", err)
 	}
 

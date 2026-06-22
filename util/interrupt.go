@@ -5,8 +5,8 @@ import (
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/nixcontext"
+	"github.com/sund3RRR/gonix/pkg/raw"
 	"github.com/sund3RRR/gonix/store"
-	"github.com/sund3RRR/nix-go-bindings"
 )
 
 // StoreInterrupt requests interruption of active operations on s.
@@ -25,7 +25,7 @@ func StoreInterrupt(ctx *nixcontext.Context, s *store.Store) error {
 		return fmt.Errorf("util: failed to borrow store: %w", err)
 	}
 
-	if code := nix.StoreInterrupt(rawCtx, rawStore); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.StoreInterrupt(rawCtx, rawStore); status.ErrorCode(code) != status.ErrorCodeOK {
 		return fmt.Errorf("util: failed to interrupt store: %w", status.FromContext(rawCtx))
 	}
 
@@ -34,15 +34,15 @@ func StoreInterrupt(ctx *nixcontext.Context, s *store.Store) error {
 
 // InterruptRequest sets Nix's process-global cooperative interruption flag.
 func InterruptRequest() {
-	nix.InterruptRequest()
+	raw.InterruptRequest()
 }
 
 // InterruptRequested reports whether process-global interruption is pending.
 func InterruptRequested() bool {
-	return nix.InterruptRequested()
+	return raw.InterruptRequested()
 }
 
 // InterruptClear clears Nix's process-global cooperative interruption flag.
 func InterruptClear() {
-	nix.InterruptClear()
+	raw.InterruptClear()
 }

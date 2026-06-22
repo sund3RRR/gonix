@@ -5,8 +5,8 @@ import (
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/nixcontext"
+	"github.com/sund3RRR/gonix/pkg/raw"
 	"github.com/sund3RRR/gonix/pkg/utils"
-	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
 // ValueType identifies a Nix value's runtime type.
@@ -77,7 +77,7 @@ func (vt ValueType) String() string {
 // open. Close releases the owned value reference and is idempotent.
 type Value struct {
 	ctx   *nixcontext.Context
-	ptr   *nix.NixValue
+	ptr   *raw.NixValue
 	owner *Evaluator
 }
 
@@ -92,7 +92,7 @@ func (v *Value) Type() (ValueType, error) {
 		return 0, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
-	typ := nix.GetType(rawCtx, v.ptr)
+	typ := raw.GetType(rawCtx, v.ptr)
 	if err := status.FromContext(rawCtx); err != nil {
 		return 0, fmt.Errorf("eval: failed to get value type: %w", err)
 	}
@@ -111,7 +111,7 @@ func (v *Value) TypeName() (string, error) {
 		return "", fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
-	ptr := nix.GetTypename(rawCtx, v.ptr)
+	ptr := raw.GetTypename(rawCtx, v.ptr)
 	if ptr == nil {
 		return "", fmt.Errorf("eval: failed to get value type name: %w", status.FromContext(rawCtx))
 	}
@@ -133,7 +133,7 @@ func (v *Value) Bool() (bool, error) {
 		return false, err
 	}
 
-	got := nix.GetBool(rawCtx, v.ptr)
+	got := raw.GetBool(rawCtx, v.ptr)
 	if err := status.FromContext(rawCtx); err != nil {
 		return false, fmt.Errorf("eval: failed to get bool: %w", err)
 	}
@@ -155,7 +155,7 @@ func (v *Value) Int() (int64, error) {
 		return 0, err
 	}
 
-	got := nix.GetInt(rawCtx, v.ptr)
+	got := raw.GetInt(rawCtx, v.ptr)
 	if err := status.FromContext(rawCtx); err != nil {
 		return 0, fmt.Errorf("eval: failed to get int: %w", err)
 	}
@@ -177,7 +177,7 @@ func (v *Value) Float() (float64, error) {
 		return 0, err
 	}
 
-	got := nix.GetFloat(rawCtx, v.ptr)
+	got := raw.GetFloat(rawCtx, v.ptr)
 	if err := status.FromContext(rawCtx); err != nil {
 		return 0, fmt.Errorf("eval: failed to get float: %w", err)
 	}
@@ -199,7 +199,7 @@ func (v *Value) String() (string, error) {
 		return "", err
 	}
 
-	ptr := nix.GetString(rawCtx, v.ptr)
+	ptr := raw.GetString(rawCtx, v.ptr)
 	if ptr == nil {
 		return "", fmt.Errorf("eval: failed to get string: %w", status.FromContext(rawCtx))
 	}
@@ -221,7 +221,7 @@ func (v *Value) PathString() (string, error) {
 		return "", err
 	}
 
-	ptr := nix.GetPathString(rawCtx, v.ptr)
+	ptr := raw.GetPathString(rawCtx, v.ptr)
 	if ptr == nil {
 		return "", fmt.Errorf("eval: failed to get path string: %w", status.FromContext(rawCtx))
 	}
@@ -243,7 +243,7 @@ func (v *Value) ListLen() (uint32, error) {
 		return 0, err
 	}
 
-	got := nix.GetListSize(rawCtx, v.ptr)
+	got := raw.GetListSize(rawCtx, v.ptr)
 	if err := status.FromContext(rawCtx); err != nil {
 		return 0, fmt.Errorf("eval: failed to get list size: %w", err)
 	}
@@ -265,7 +265,7 @@ func (v *Value) AttrLen() (uint32, error) {
 		return 0, err
 	}
 
-	got := nix.GetAttrsSize(rawCtx, v.ptr)
+	got := raw.GetAttrsSize(rawCtx, v.ptr)
 	if err := status.FromContext(rawCtx); err != nil {
 		return 0, fmt.Errorf("eval: failed to get attrs size: %w", err)
 	}
@@ -278,7 +278,7 @@ func (v *Value) AttrLen() (uint32, error) {
 // Callers must not free the returned pointer and must not retain it beyond the
 // immediate raw Nix call that needs it. This is an escape hatch for integration
 // with lower-level bindings.
-func (v *Value) Borrow() (*nix.NixValue, error) {
+func (v *Value) Borrow() (*raw.NixValue, error) {
 	if err := v.validate(); err != nil {
 		return nil, err
 	}
@@ -305,7 +305,7 @@ func (v *Value) Close() error {
 		v.ptr = nil
 	}()
 
-	if code := nix.ValueDecref(rawCtx, v.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.ValueDecref(rawCtx, v.ptr); status.ErrorCode(code) != status.ErrorCodeOK {
 		return fmt.Errorf("eval: failed to decref value: %w", status.FromContext(rawCtx))
 	}
 
@@ -320,8 +320,8 @@ func (v *Value) validate() error {
 	return nil
 }
 
-func (v *Value) requireType(rawCtx *nix.NixCContext, expected ValueType) error {
-	actual := ValueType(nix.GetType(rawCtx, v.ptr))
+func (v *Value) requireType(rawCtx *raw.NixCContext, expected ValueType) error {
+	actual := ValueType(raw.GetType(rawCtx, v.ptr))
 	if err := status.FromContext(rawCtx); err != nil {
 		return fmt.Errorf("eval: failed to get value type: %w", err)
 	}

@@ -5,9 +5,9 @@ import (
 	"math"
 
 	"github.com/sund3RRR/gonix/internal/status"
+	"github.com/sund3RRR/gonix/pkg/raw"
 	"github.com/sund3RRR/gonix/pkg/utils"
 	"github.com/sund3RRR/gonix/storepath"
-	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
 // GCAction selects the operation performed by Store.CollectGarbage.
@@ -125,7 +125,7 @@ func (s *Store) AddTempRoot(path string) error {
 		return fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	if code := nix.StoreAddTempRoot(rawCtx, s.ptr, pathPtr); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.StoreAddTempRoot(rawCtx, s.ptr, pathPtr); status.ErrorCode(code) != status.ErrorCodeOK {
 		return fmt.Errorf("store: failed to add temporary GC root: %w", status.FromContext(rawCtx))
 	}
 
@@ -157,7 +157,7 @@ func (s *Store) AddPermanentRoot(path, root string) (string, error) {
 		return "", fmt.Errorf("store: failed to borrow path: %w", err)
 	}
 
-	rootPtr := nix.StoreAddPermanentRoot(rawCtx, s.ptr, pathPtr, root)
+	rootPtr := raw.StoreAddPermanentRoot(rawCtx, s.ptr, pathPtr, root)
 	if rootPtr == nil {
 		if err := status.FromContext(rawCtx); err != nil {
 			return "", fmt.Errorf("store: failed to add permanent GC root: %w", err)
@@ -183,14 +183,14 @@ func (s *Store) FindRoots(censor bool) ([]GCRoot, error) {
 		return nil, fmt.Errorf("store: failed to borrow context: %w", err)
 	}
 
-	rawRoots := nix.StoreFindRoots(rawCtx, s.ptr, censor)
+	rawRoots := raw.StoreFindRoots(rawCtx, s.ptr, censor)
 	if rawRoots == nil {
 		if err := status.FromContext(rawCtx); err != nil {
 			return nil, fmt.Errorf("store: failed to find GC roots: %w", err)
 		}
 		return nil, fmt.Errorf("store: failed to find GC roots")
 	}
-	defer nix.StoreRootsFree(rawRoots)
+	defer raw.StoreRootsFree(rawRoots)
 
 	roots, err := s.convertRoots(rawCtx, rawRoots)
 	if err != nil {
@@ -232,7 +232,7 @@ func (s *Store) CollectGarbage(action GCAction, opts ...GCOption) (GCResult, err
 		}
 	}()
 
-	pathItems := make([]nix.StorePathItem, len(cfg.PathsToDelete))
+	pathItems := make([]raw.StorePathItem, len(cfg.PathsToDelete))
 	for i, path := range cfg.PathsToDelete {
 		parsedPath, err := s.ParsePath(path)
 		if err != nil {
@@ -247,24 +247,24 @@ func (s *Store) CollectGarbage(action GCAction, opts ...GCOption) (GCResult, err
 		pathItems[i].Path = pathPtr
 	}
 
-	rawOptions := nix.StoreGCOptions{
+	rawOptions := raw.StoreGCOptions{
 		Action:         rawAction,
 		IgnoreLiveness: cfg.IgnoreLiveness,
-		PathsToDelete: nix.StorePathList{
+		PathsToDelete: raw.StorePathList{
 			Items: pathItems,
 			Len:   uint64(len(pathItems)),
 		},
 		MaxFreed: cfg.MaxFreed,
 	}
 
-	rawResults := nix.StoreCollectGarbage(rawCtx, s.ptr, rawOptions)
+	rawResults := raw.StoreCollectGarbage(rawCtx, s.ptr, rawOptions)
 	if rawResults == nil {
 		if err := status.FromContext(rawCtx); err != nil {
 			return GCResult{}, fmt.Errorf("store: failed to collect garbage: %w", err)
 		}
 		return GCResult{}, fmt.Errorf("store: failed to collect garbage")
 	}
-	defer nix.StoreGCResultsFree(rawResults)
+	defer raw.StoreGCResultsFree(rawResults)
 
 	result, err := convertGCResult(rawCtx, rawResults)
 	if err != nil {
@@ -274,26 +274,26 @@ func (s *Store) CollectGarbage(action GCAction, opts ...GCOption) (GCResult, err
 	return result, nil
 }
 
-func rawGCAction(action GCAction) (nix.StoreGCAction, error) {
+func rawGCAction(action GCAction) (raw.StoreGCAction, error) {
 	switch action {
 	case GCReturnLive:
-		return nix.StoreGCReturnLive, nil
+		return raw.StoreGCReturnLive, nil
 	case GCReturnDead:
-		return nix.StoreGCReturnDead, nil
+		return raw.StoreGCReturnDead, nil
 	case GCDeleteDead:
-		return nix.StoreGCDeleteDead, nil
+		return raw.StoreGCDeleteDead, nil
 	case GCDeleteSpecific:
-		return nix.StoreGCDeleteSpecific, nil
+		return raw.StoreGCDeleteSpecific, nil
 	default:
 		return 0, fmt.Errorf("store: invalid garbage collection action %d", action)
 	}
 }
 
-func (s *Store) convertRoots(rawCtx *nix.NixCContext, rawRoots *nix.StoreRoots) ([]GCRoot, error) {
-	roots := make([]GCRoot, 0, nix.StoreRootsCount(rawRoots))
+func (s *Store) convertRoots(rawCtx *raw.NixCContext, rawRoots *raw.StoreRoots) ([]GCRoot, error) {
+	roots := make([]GCRoot, 0, raw.StoreRootsCount(rawRoots))
 
-	for i := range nix.StoreRootsCount(rawRoots) {
-		pathPtr := nix.StoreRootsPathClone(rawRoots, i)
+	for i := range raw.StoreRootsCount(rawRoots) {
+		pathPtr := raw.StoreRootsPathClone(rawRoots, i)
 		if pathPtr == nil {
 			if err := status.FromContext(rawCtx); err != nil {
 				return nil, fmt.Errorf("clone GC root path %d: %w", i, err)
@@ -301,9 +301,9 @@ func (s *Store) convertRoots(rawCtx *nix.NixCContext, rawRoots *nix.StoreRoots) 
 			return nil, fmt.Errorf("clone GC root path %d", i)
 		}
 
-		linkPtr := nix.StoreRootsLink(rawRoots, i)
+		linkPtr := raw.StoreRootsLink(rawRoots, i)
 		if linkPtr == nil {
-			nix.StorePathFree(pathPtr)
+			raw.StorePathFree(pathPtr)
 			if err := status.FromContext(rawCtx); err != nil {
 				return nil, fmt.Errorf("read GC root link %d: %w", i, err)
 			}
@@ -313,7 +313,7 @@ func (s *Store) convertRoots(rawCtx *nix.NixCContext, rawRoots *nix.StoreRoots) 
 
 		path, err := storepath.New(s.ctx, pathPtr)
 		if err != nil {
-			nix.StorePathFree(pathPtr)
+			raw.StorePathFree(pathPtr)
 			return nil, fmt.Errorf("create GC root path %d: %w", i, err)
 		}
 		pathString := s.PrintPath(path.Hash(), path.Name())
@@ -330,15 +330,15 @@ func (s *Store) convertRoots(rawCtx *nix.NixCContext, rawRoots *nix.StoreRoots) 
 	return roots, nil
 }
 
-func convertGCResult(rawCtx *nix.NixCContext, rawResults *nix.StoreGCResults) (GCResult, error) {
-	count := nix.StoreGCResultsCount(rawResults)
+func convertGCResult(rawCtx *raw.NixCContext, rawResults *raw.StoreGCResults) (GCResult, error) {
+	count := raw.StoreGCResultsCount(rawResults)
 	result := GCResult{
 		Paths:      make([]string, 0, count),
-		BytesFreed: nix.StoreGCResultsBytesFreed(rawResults),
+		BytesFreed: raw.StoreGCResultsBytesFreed(rawResults),
 	}
 
 	for i := range count {
-		pathPtr := nix.StoreGCResultsPath(rawResults, i)
+		pathPtr := raw.StoreGCResultsPath(rawResults, i)
 		if pathPtr == nil {
 			if err := status.FromContext(rawCtx); err != nil {
 				return GCResult{}, fmt.Errorf("read garbage collection path %d: %w", i, err)

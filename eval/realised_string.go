@@ -6,8 +6,8 @@ import (
 	"unsafe"
 
 	"github.com/sund3RRR/gonix/internal/status"
+	"github.com/sund3RRR/gonix/pkg/raw"
 	"github.com/sund3RRR/gonix/storepath"
-	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
 // RealisedString is a Nix string with its referenced store paths.
@@ -61,28 +61,28 @@ func (e *Evaluator) RealiseString(v *Value) (*RealisedString, error) {
 		return nil, fmt.Errorf("eval: failed to validate value: %w", err)
 	}
 
-	realised := nix.StringRealise(rawCtx, e.state, v.ptr, false)
+	realised := raw.StringRealise(rawCtx, e.state, v.ptr, false)
 	if realised == nil {
 		return nil, fmt.Errorf("eval: failed to realise string: %w", status.FromContext(rawCtx))
 	}
-	defer nix.RealisedStringFree(realised)
+	defer raw.RealisedStringFree(realised)
 
-	valuePtr := nix.RealisedStringGetBuffer(realised)
+	valuePtr := raw.RealisedStringGetBuffer(realised)
 	if valuePtr == nil {
 		return nil, fmt.Errorf("eval: failed to get realised string buffer: %w", status.FromContext(rawCtx))
 	}
-	size := nix.RealisedStringGetBufferSize(realised)
+	size := raw.RealisedStringGetBufferSize(realised)
 	value := string(unsafe.Slice(valuePtr, size))
-	nix.StringFree(valuePtr)
+	raw.StringFree(valuePtr)
 
-	count := nix.RealisedStringGetStorePathCount(realised)
+	count := raw.RealisedStringGetStorePathCount(realised)
 	out := &RealisedString{
 		Value: value,
 		Paths: make([]*storepath.Path, 0, count),
 	}
 
 	for i := range count {
-		pathPtr := nix.RealisedStringGetStorePath(realised, i)
+		pathPtr := raw.RealisedStringGetStorePath(realised, i)
 		if pathPtr == nil {
 			_ = out.Close()
 			return nil, fmt.Errorf("eval: failed to clone realised string path %d: %w", i, status.FromContext(rawCtx))

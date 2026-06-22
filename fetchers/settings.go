@@ -6,7 +6,7 @@ import (
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/nixcontext"
-	nix "github.com/sund3RRR/nix-go-bindings"
+	"github.com/sund3RRR/gonix/pkg/raw"
 )
 
 // Settings owns a Nix fetcher settings handle.
@@ -16,7 +16,7 @@ import (
 // gonix.ErrClosed after Close.
 type Settings struct {
 	ctx *nixcontext.Context
-	ptr *nix.NixFetchersSettings
+	ptr *raw.NixFetchersSettings
 }
 
 // NewSettings creates fetcher settings using an initialized Nix context.
@@ -30,7 +30,7 @@ func NewSettings(ctx *nixcontext.Context) (*Settings, error) {
 		return nil, fmt.Errorf("fetchers: failed to borrow context: %w", err)
 	}
 
-	ptr := nix.FetchersSettingsNew(rawCtx)
+	ptr := raw.FetchersSettingsNew(rawCtx)
 	if ptr == nil {
 		return nil, fmt.Errorf("fetchers: failed to create settings: %w", status.FromContext(rawCtx))
 	}
@@ -46,7 +46,7 @@ func NewSettings(ctx *nixcontext.Context) (*Settings, error) {
 // Callers must not free the returned pointer and must not retain it beyond the
 // immediate raw Nix call that needs it. This is an escape hatch for integration
 // with lower-level bindings.
-func (s *Settings) Borrow() (*nix.NixFetchersSettings, error) {
+func (s *Settings) Borrow() (*raw.NixFetchersSettings, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed
 	}
@@ -63,7 +63,7 @@ func (s *Settings) Close() error {
 		return nil
 	}
 
-	nix.FetchersSettingsFree(s.ptr)
+	raw.FetchersSettingsFree(s.ptr)
 	s.ptr = nil
 
 	return nil

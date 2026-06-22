@@ -5,8 +5,8 @@ import (
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/nixcontext"
+	"github.com/sund3RRR/gonix/pkg/raw"
 	"github.com/sund3RRR/gonix/store"
-	nix "github.com/sund3RRR/nix-go-bindings"
 )
 
 // Evaluator owns a Nix evaluation state.
@@ -18,7 +18,7 @@ import (
 // Value before closing the Evaluator.
 type Evaluator struct {
 	ctx   *nixcontext.Context
-	state *nix.EvalState
+	state *raw.EvalState
 }
 
 // New creates an evaluator using an initialized Nix context and open store.
@@ -41,14 +41,14 @@ func New(ctx *nixcontext.Context, s *store.Store, opts ...Option) (*Evaluator, e
 		return nil, fmt.Errorf("eval: failed to borrow store: %w", err)
 	}
 
-	builder := nix.EvalStateBuilderNew(rawCtx, storePtr)
+	builder := raw.EvalStateBuilderNew(rawCtx, storePtr)
 	if builder == nil {
 		return nil, fmt.Errorf("eval: failed to create eval state builder: %w", status.FromContext(rawCtx))
 	}
-	defer nix.EvalStateBuilderFree(builder)
+	defer raw.EvalStateBuilderFree(builder)
 
 	lookupPath := stringArray(cfg.lookupPath)
-	if code := nix.EvalStateBuilderSetLookupPath(rawCtx, builder, lookupPath); status.ErrorCode(code) != status.ErrorCodeOK {
+	if code := raw.EvalStateBuilderSetLookupPath(rawCtx, builder, lookupPath); status.ErrorCode(code) != status.ErrorCodeOK {
 		return nil, fmt.Errorf("eval: failed to set lookup path: %w", status.FromContext(rawCtx))
 	}
 
@@ -58,12 +58,12 @@ func New(ctx *nixcontext.Context, s *store.Store, opts ...Option) (*Evaluator, e
 			return nil, fmt.Errorf("eval: failed to borrow flake settings: %w", err)
 		}
 
-		if code := nix.FlakeSettingsAddToEvalStateBuilder(rawCtx, flakesettingsPtr, builder); status.ErrorCode(code) != status.ErrorCodeOK {
+		if code := raw.FlakeSettingsAddToEvalStateBuilder(rawCtx, flakesettingsPtr, builder); status.ErrorCode(code) != status.ErrorCodeOK {
 			return nil, fmt.Errorf("eval: failed to add flake settings: %w", status.FromContext(rawCtx))
 		}
 	}
 
-	state := nix.EvalStateBuild(rawCtx, builder)
+	state := raw.EvalStateBuild(rawCtx, builder)
 	if state == nil {
 		return nil, fmt.Errorf("eval: failed to build eval state: %w", status.FromContext(rawCtx))
 	}
@@ -79,7 +79,7 @@ func New(ctx *nixcontext.Context, s *store.Store, opts ...Option) (*Evaluator, e
 // Callers must not free the returned pointer and must not retain it beyond the
 // immediate raw Nix call that needs it. This is an escape hatch for integration
 // with lower-level bindings.
-func (e *Evaluator) Borrow() (*nix.EvalState, error) {
+func (e *Evaluator) Borrow() (*raw.EvalState, error) {
 	if e.state == nil {
 		return nil, status.ErrClosed
 	}
@@ -93,7 +93,7 @@ func (e *Evaluator) Borrow() (*nix.EvalState, error) {
 // refcounted values from lower-level Nix APIs. Callers transfer ownership of
 // ptr to the returned Value and must not decref ptr directly after a successful
 // call. The returned Value must be closed by the caller.
-func (e *Evaluator) WrapValue(ptr *nix.NixValue) (*Value, error) {
+func (e *Evaluator) WrapValue(ptr *raw.NixValue) (*Value, error) {
 	if e.state == nil {
 		return nil, status.ErrClosed
 	}
@@ -118,7 +118,7 @@ func (e *Evaluator) Close() error {
 		return nil
 	}
 
-	nix.StateFree(e.state)
+	raw.StateFree(e.state)
 	e.state = nil
 	e.ctx = nil
 
@@ -135,7 +135,7 @@ func (e *Evaluator) allocValue() (*Value, error) {
 		return nil, fmt.Errorf("eval: failed to borrow context: %w", err)
 	}
 
-	ptr := nix.AllocValue(rawCtx, e.state)
+	ptr := raw.AllocValue(rawCtx, e.state)
 	if ptr == nil {
 		return nil, fmt.Errorf("eval: failed to allocate value: %w", status.FromContext(rawCtx))
 	}
@@ -169,16 +169,16 @@ func (e *Evaluator) validateValue(v *Value) error {
 	return nil
 }
 
-func stringArray(values []string) nix.StringArray {
-	items := make([]nix.StringItem, len(values))
+func stringArray(values []string) raw.StringArray {
+	items := make([]raw.StringItem, len(values))
 	for i, value := range values {
-		items[i] = nix.StringItem{
+		items[i] = raw.StringItem{
 			Value: []byte(value),
 			Len:   uint64(len(value)),
 		}
 	}
 
-	return nix.StringArray{
+	return raw.StringArray{
 		Items: items,
 		Len:   uint64(len(items)),
 	}

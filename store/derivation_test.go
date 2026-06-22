@@ -9,7 +9,7 @@ import (
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/nixcontext"
-	nix "github.com/sund3RRR/nix-go-bindings"
+	"github.com/sund3RRR/gonix/pkg/raw"
 )
 
 const testDerivationJSON = `{
@@ -110,7 +110,7 @@ func newDerivationTestContext(t *testing.T) *nixcontext.Context {
 	return ctx
 }
 
-func newDerivationTestStore(t *testing.T, ctx *nixcontext.Context) *nix.Store {
+func newDerivationTestStore(t *testing.T, ctx *nixcontext.Context) *raw.Store {
 	t.Helper()
 
 	rawCtx, err := ctx.Borrow()
@@ -118,18 +118,18 @@ func newDerivationTestStore(t *testing.T, ctx *nixcontext.Context) *nix.Store {
 		t.Fatalf("Context.Borrow() error = %v", err)
 	}
 
-	store := nix.StoreOpen(rawCtx, "dummy://", nix.StoreParams{})
+	store := raw.StoreOpen(rawCtx, "dummy://", raw.StoreParams{})
 	if store == nil {
 		t.Fatalf("StoreOpen(dummy://) returned nil: %v", status.FromContext(rawCtx))
 	}
 	t.Cleanup(func() {
-		nix.StoreFree(store)
+		raw.StoreFree(store)
 	})
 
 	return store
 }
 
-func newRawTestDerivation(t *testing.T, ctx *nixcontext.Context, store *nix.Store) *nix.NixDerivation {
+func newRawTestDerivation(t *testing.T, ctx *nixcontext.Context, store *raw.Store) *raw.NixDerivation {
 	t.Helper()
 
 	rawCtx, err := ctx.Borrow()
@@ -137,7 +137,7 @@ func newRawTestDerivation(t *testing.T, ctx *nixcontext.Context, store *nix.Stor
 		t.Fatalf("Context.Borrow() error = %v", err)
 	}
 
-	ptr := nix.DerivationFromJson(rawCtx, store, testDerivationJSON)
+	ptr := raw.DerivationFromJson(rawCtx, store, testDerivationJSON)
 	if ptr == nil {
 		t.Fatalf("DerivationFromJson returned nil: %v", status.FromContext(rawCtx))
 	}

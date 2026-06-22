@@ -1,0 +1,157 @@
+GENERATOR:
+  PackageName: raw
+  PackageDescription: "Generated Go bindings for the Nix C API."
+  PackageLicense: "LGPL-2.1-or-later"
+  Includes:
+    - nix_go_util.h
+    - nix_go_store.h
+    - nix_go_fetchers.h
+    - nix_go_expr.h
+    - nix_go_flake.h
+    - nix_go_main.h
+  PkgConfigOpts:
+    - nix-util-c
+    - nix-store-c
+    - nix-fetchers-c
+    - nix-expr-c
+    - nix-flake-c
+    - nix-main-c
+  FlagGroups:
+    - { name: CXXFLAGS, flags: ["-std=c++23"] }
+    - { name: LDFLAGS, flags: ["-lnixflake", "-lnixstore", "-lnixutil"] }
+    - { name: LDFLAGS, traits: ["darwin"], flags: ["-lc++"] }
+    - { name: LDFLAGS, traits: ["linux"], flags: ["-lstdc++"] }
+
+PARSER:
+  Defines:
+    __STDC_VERSION__: 199901
+  IncludePaths:
+    - .
+  SourcesPaths:
+    - nix_go_util.h
+    - nix_go_store.h
+    - nix_go_fetchers.h
+    - nix_go_expr.h
+    - nix_go_flake.h
+    - nix_go_main.h
+
+TRANSLATOR:
+  ConstRules:
+    defines: eval
+    enum: eval
+
+  Rules:
+    global:
+      - { action: accept, from: "^go_nix_" }
+      - { action: accept, from: "^Store$" }
+      - { action: accept, from: "^StorePath$" }
+      - { action: accept, from: "^go_nix_store_path_hash_part$" }
+      - { action: accept, from: "^go_nix_string_item$" }
+      - { action: accept, from: "^go_nix_string_array$" }
+      - { action: accept, from: "^go_nix_value_item$" }
+      - { action: accept, from: "^go_nix_value_array$" }
+      - { action: accept, from: "^go_nix_value_type$" }
+      - { action: accept, from: "^go_nix_store_realise_results$" }
+      - { action: accept, from: "^go_nix_store_path_array$" }
+      - { action: accept, from: "^go_nix_store_roots$" }
+      - { action: accept, from: "^go_nix_store_gc_results$" }
+      - { action: accept, from: "^nix_c_context$" }
+      - { action: accept, from: "^nix_derivation$" }
+      - { action: accept, from: "^nix_fetchers_settings$" }
+      - { action: accept, from: "^nix_flake_settings$" }
+      - { action: accept, from: "^nix_flake_reference_parse_flags$" }
+      - { action: accept, from: "^nix_flake_reference$" }
+      - { action: accept, from: "^nix_flake_lock_flags$" }
+      - { action: accept, from: "^nix_locked_flake$" }
+      - { action: accept, from: "^go_nix_flake_reference_result$" }
+      - { action: accept, from: "^nix_eval_state_builder$" }
+      - { action: accept, from: "^EvalState$" }
+      - { action: accept, from: "^nix_value$" }
+      - { action: accept, from: "^BindingsBuilder$" }
+      - { action: accept, from: "^ListBuilder$" }
+      - { action: accept, from: "^PrimOp$" }
+      - { action: accept, from: "^ExternalValue$" }
+      - { action: accept, from: "^nix_realised_string$" }
+      - { action: accept, from: "^nix_err$" }
+      - { action: accept, from: "^nix_verbosity$" }
+      - { action: accept, from: "^NIX_(OK|ERR_|LVL_)" }
+      - { action: accept, from: "^GO_NIX_TYPE_" }
+      - { action: accept, from: "^GO_NIX_STORE_GC_" }
+
+    post-global:
+      - { action: replace, from: "^go_nix_", to: "" }
+      - { load: snakecase }
+      - { transform: export }
+      - { action: replace, from: "^GONIXTYPETHUNK$", to: "NixTypeThunk" }
+      - { action: replace, from: "^GONIXTYPEINT$", to: "NixTypeInt" }
+      - { action: replace, from: "^GONIXTYPEFLOAT$", to: "NixTypeFloat" }
+      - { action: replace, from: "^GONIXTYPEBOOL$", to: "NixTypeBool" }
+      - { action: replace, from: "^GONIXTYPESTRING$", to: "NixTypeString" }
+      - { action: replace, from: "^GONIXTYPEPATH$", to: "NixTypePath" }
+      - { action: replace, from: "^GONIXTYPENULL$", to: "NixTypeNull" }
+      - { action: replace, from: "^GONIXTYPEATTRS$", to: "NixTypeAttrs" }
+      - { action: replace, from: "^GONIXTYPELIST$", to: "NixTypeList" }
+      - { action: replace, from: "^GONIXTYPEFUNCTION$", to: "NixTypeFunction" }
+      - { action: replace, from: "^GONIXTYPEEXTERNAL$", to: "NixTypeExternal" }
+      - { action: replace, from: "^GONIXTYPEFAILED$", to: "NixTypeFailed" }
+      - { action: replace, from: "^GONIXSTOREGC", to: "StoreGC" }
+      - { action: replace, from: "^StoreGCRETURNLIVE$", to: "StoreGCReturnLive" }
+      - { action: replace, from: "^StoreGCRETURNDEAD$", to: "StoreGCReturnDead" }
+      - { action: replace, from: "^StoreGCDELETEDEAD$", to: "StoreGCDeleteDead" }
+      - { action: replace, from: "^StoreGCDELETESPECIFIC$", to: "StoreGCDeleteSpecific" }
+      - { action: replace, from: "^StoreGc", to: "StoreGC" }
+      - { action: replace, from: "^nix_", to: "" }
+      - { action: replace, from: "^NIXOK$", to: "NixOk" }
+      - { action: replace, from: "^NIXERRUNKNOWN$", to: "NixErrUnknown" }
+      - { action: replace, from: "^NIXERROVERFLOW$", to: "NixErrOverflow" }
+      - { action: replace, from: "^NIXERRKEY$", to: "NixErrKey" }
+      - { action: replace, from: "^NIXERRNIXERROR$", to: "NixErrNixError" }
+      - { action: replace, from: "^NIXERRRECOVERABLE$", to: "NixErrRecoverable" }
+      - { action: replace, from: "^NIXLVLERROR$", to: "NixLvlError" }
+      - { action: replace, from: "^NIXLVLWARN$", to: "NixLvlWarn" }
+      - { action: replace, from: "^NIXLVLNOTICE$", to: "NixLvlNotice" }
+      - { action: replace, from: "^NIXLVLINFO$", to: "NixLvlInfo" }
+      - { action: replace, from: "^NIXLVLTALKATIVE$", to: "NixLvlTalkative" }
+      - { action: replace, from: "^NIXLVLCHATTY$", to: "NixLvlChatty" }
+      - { action: replace, from: "^NIXLVLDEBUG$", to: "NixLvlDebug" }
+      - { action: replace, from: "^NIXLVLVOMIT$", to: "NixLvlVomit" }
+      - { action: replace, from: "^NIXERR", to: "NixErr" }
+      - { action: replace, from: "^NIXLVL", to: "NixLvl" }
+      - { action: replace, from: "^NIX_OK$", to: "NixOk" }
+      - { action: replace, from: "^NIX_ERR_NIX_ERROR$", to: "NixErrNixError" }
+      - { action: replace, from: "^NIX_ERR_", to: "NixErr" }
+      - { action: replace, from: "^NIX_LVL_", to: "NixLvl" }
+      - { action: replace, from: "^NIX_TYPE_", to: "Nix_Type_" }
+      - { action: replace, from: "^NIX_", to: "Nix_" }
+      - { action: replace, from: "_t$" }
+    private:
+      - { transform: unexport }
+
+  MemTips:
+    - { target: "^Store$", self: raw }
+    - { target: "^StorePath$", self: raw }
+    - { target: "^go_nix_store_realise_results$", self: raw }
+    - { target: "^go_nix_store_path_array$", self: raw }
+    - { target: "^go_nix_store_roots$", self: raw }
+    - { target: "^go_nix_store_gc_results$", self: raw }
+    - { target: "^nix_c_context$", self: raw }
+    - { target: "^nix_derivation$", self: raw }
+    - { target: "^nix_fetchers_settings$", self: raw }
+    - { target: "^nix_flake_settings$", self: raw }
+    - { target: "^nix_flake_reference_parse_flags$", self: raw }
+    - { target: "^nix_flake_reference$", self: raw }
+    - { target: "^nix_flake_lock_flags$", self: raw }
+    - { target: "^nix_locked_flake$", self: raw }
+    - { target: "^go_nix_flake_reference_result$", self: raw }
+    - { target: "^nix_eval_state_builder$", self: raw }
+    - { target: "^EvalState$", self: raw }
+    - { target: "^nix_value$", self: raw }
+    - { target: "^BindingsBuilder$", self: raw }
+    - { target: "^ListBuilder$", self: raw }
+    - { target: "^PrimOp$", self: raw }
+    - { target: "^ExternalValue$", self: raw }
+    - { target: "^nix_realised_string$", self: raw }
+
+  PtrTips:
+    function:
+      - { target: "^go_nix_", default: "sref" }

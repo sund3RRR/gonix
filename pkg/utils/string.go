@@ -1,11 +1,10 @@
-// Package utils provides shared adapters for values returned by
-// nix-go-bindings.
+// Package utils provides shared adapters for values returned by pkg/raw.
 package utils
 
 import (
 	"unsafe"
 
-	raw "github.com/sund3RRR/nix-go-bindings"
+	"github.com/sund3RRR/gonix/pkg/raw"
 )
 
 // TakeCString copies a Nix-owned C string into Go and releases the original.

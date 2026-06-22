@@ -1,10 +1,10 @@
 package status
 
-import raw "github.com/sund3RRR/nix-go-bindings"
+import "github.com/sund3RRR/gonix/pkg/raw"
 
 // ErrorCode identifies a status code returned by the Nix C API.
 //
-// The numeric values intentionally mirror nix-go-bindings so callers can log
+// The numeric values intentionally mirror pkg/raw so callers can log
 // or compare gonix errors without importing raw generated types. Unknown raw
 // values are preserved as numbers, but String reports them as NIX_ERR_UNKNOWN.
 type ErrorCode int32

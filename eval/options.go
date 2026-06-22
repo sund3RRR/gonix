@@ -1,7 +1,7 @@
 // Package eval wraps Nix evaluation states and values.
 //
 // The package exposes Go-native evaluators, values, builders, and realized
-// strings over the generated nix-go-bindings expression API. Evaluators own the
+// strings over the generated pkg/raw expression API. Evaluators own the
 // underlying Nix evaluation state and values are tied to the evaluator that
 // created them.
 package eval

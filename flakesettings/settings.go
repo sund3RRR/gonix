@@ -5,7 +5,7 @@ import (
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/nixcontext"
-	nix "github.com/sund3RRR/nix-go-bindings"
+	"github.com/sund3RRR/gonix/pkg/raw"
 )
 
 // Settings owns a Nix flake settings handle.
@@ -15,7 +15,7 @@ import (
 // gonix.ErrClosed after Close.
 type Settings struct {
 	ctx *nixcontext.Context
-	ptr *nix.NixFlakeSettings
+	ptr *raw.NixFlakeSettings
 }
 
 // New creates flake settings using an initialized Nix context.
@@ -29,7 +29,7 @@ func New(ctx *nixcontext.Context) (*Settings, error) {
 		return nil, fmt.Errorf("flake: failed to borrow context: %w", err)
 	}
 
-	ptr := nix.FlakeSettingsNew(rawCtx)
+	ptr := raw.FlakeSettingsNew(rawCtx)
 	if ptr == nil {
 		return nil, fmt.Errorf("flake: failed to create settings: %w", status.FromContext(rawCtx))
 	}
@@ -45,7 +45,7 @@ func New(ctx *nixcontext.Context) (*Settings, error) {
 // Callers must not free the returned pointer and must not retain it beyond the
 // immediate raw Nix call that needs it. This is an escape hatch for integration
 // with lower-level bindings.
-func (s *Settings) Borrow() (*nix.NixFlakeSettings, error) {
+func (s *Settings) Borrow() (*raw.NixFlakeSettings, error) {
 	if s.ptr == nil {
 		return nil, status.ErrClosed
 	}
@@ -62,7 +62,7 @@ func (s *Settings) Close() error {
 		return nil
 	}
 
-	nix.FlakeSettingsFree(s.ptr)
+	raw.FlakeSettingsFree(s.ptr)
 	s.ptr = nil
 
 	return nil

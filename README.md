@@ -2,10 +2,10 @@
 
 Experimental high-level Go SDK for working with [Nix](https://github.com/NixOS/nix).
 
-`gonix` is an ergonomic Go layer built on top of
-[`nix-go-bindings`](https://github.com/sund3RRR/nix-go-bindings), which provides
-low-level generated bindings to the Nix C API and narrow binding-owned adapters
-for Nix functionality that has no public C equivalent.
+`gonix` is an ergonomic Go layer built on top of its bundled
+[`pkg/raw`](pkg/raw) package. That package contains low-level generated bindings
+to the Nix C API and narrow binding-owned adapters for Nix functionality that
+has no public C equivalent.
 
 The goal of this package is to expose Nix concepts through Go-native APIs:
 contexts, stores, store paths, evaluation states, values, derivations, flakes,
@@ -41,46 +41,28 @@ err = client.EvalFlakeOutput(
 outputs, err := client.Realize(ctx, pkg.DrvPath)
 ```
 
-## Implementation status
+## Core features and concepts
 
 `gonix` is currently an early SDK foundation. `Client` provides a flake-first
 quick start, while `nixcontext` and the public subpackages support lower-level
 composition.
 
-- [x] Context, Client, and settings foundation.
-  - [x] Nix context initialization and shutdown.
-  - [x] Flake-ready Client configuration.
-  - [x] Selected Nix settings, verbosity, and log format.
-  - [x] Structured Nix error conversion.
-- [x] Store and store path foundation.
-  - [x] Store opening and store metadata.
-  - [x] Store path parsing, cloning, hash/name access, and lifecycle handling.
-  - [x] Filesystem closure traversal.
-  - [x] Path and closure copying between stores.
-  - [x] GC roots, live/dead queries, and garbage collection.
-- [x] Initial derivation support.
-  - [x] Derivation import/export and cloning.
-  - [x] Store-backed derivation helpers.
-  - [x] Realised output result conversion.
-- [x] Evaluation and values.
-  - [x] Evaluation state API.
-  - [x] Nix value API.
-  - [x] Value forcing, traversal, calls, and conversion helpers.
-  - [x] High-level `Client.Eval` evaluation and unmarshalling.
-- [ ] Fetchers.
-  - [x] Fetcher settings lifecycle.
-  - [ ] Fetch tree and input resolution helpers.
-  - [ ] Store path conversion for fetched inputs.
-- [x] Flakes.
-  - [x] Flake reference parsing.
-  - [x] Locked flake workflows.
-  - [x] Cached lock graph metadata and fingerprints.
-  - [x] Generic typed locked-output access.
-- [ ] Package-manager workflows.
-  - [x] Generic flake output traversal.
-  - [x] Store-backed derivation realization.
-  - [ ] Package discovery, indexing, and metadata policy belong in a package
-        manager built on gonix.
+- Flake-first `Client` API with automatic resource orchestration.
+- Composable contexts, stores, evaluators, settings, and values for advanced
+  workflows.
+- Explicit ownership with idempotent `Close` methods and documented borrowed,
+  cloned, and refcounted resources.
+- Nix settings, verbosity, log formatting, structured errors, and cooperative
+  cancellation.
+- Store paths, derivations, realization, closures, copying, GC roots, and
+  garbage collection.
+- Expression evaluation, value traversal and construction, function calls, and
+  unmarshalling into Go values.
+- Flake reference parsing, locking, input overrides, output traversal, lock
+  metadata, and fingerprints.
+- Go-native APIs over the bundled low-level `pkg/raw` package.
+- Package discovery, indexing, metadata normalization, and policy remain the
+  responsibility of software built on gonix.
 
 ## Evaluation and unmarshalling
 
@@ -196,9 +178,28 @@ empty when Nix cannot fingerprint the source or considers the graph unlocked.
 The fragment, lock information, and fingerprint remain available after the
 Flake or Client is closed.
 
+## Development
+
+The root flake provides Go, cgo, c-for-go, pkg-config, golangci-lint, and the Nix
+libraries used by both SDK layers.
+
+```sh
+nix develop
+make generate
+make test
+make lint
+make check
+```
+
+`make generate` regenerates the low-level Go package in `pkg/raw`.
+
 ## License
 
-Apache-2.0.
+This repository contains separately licensed parts:
 
-Note that `gonix` depends on [`nix-go-bindings`](https://github.com/sund3RRR/nix-go-bindings) and the Nix C libraries, which
-have their own license terms.
+- Gonix code outside `pkg/raw` is licensed under Apache-2.0; see
+  [`LICENSE`](LICENSE).
+- Everything under `pkg/raw` is licensed under LGPL-2.1-or-later; see
+  [`pkg/raw/LICENSE`](pkg/raw/LICENSE).
+- The linked Nix libraries and other dependencies retain their own license
+  terms.
