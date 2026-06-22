@@ -1,6 +1,7 @@
 package gonix
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -27,7 +28,7 @@ func TestClientEvalPrimitives(t *testing.T) {
 	client := newEvalTestClient(t)
 
 	var integer int64
-	if err := client.Eval("1 + 2", &integer); err != nil {
+	if err := client.Eval(context.Background(), "1 + 2", &integer); err != nil {
 		t.Fatalf("Client.Eval(int) error = %v", err)
 	}
 	if integer != 3 {
@@ -35,7 +36,7 @@ func TestClientEvalPrimitives(t *testing.T) {
 	}
 
 	var text string
-	if err := client.Eval(`"gonix"`, &text); err != nil {
+	if err := client.Eval(context.Background(), `"gonix"`, &text); err != nil {
 		t.Fatalf("Client.Eval(string) error = %v", err)
 	}
 	if text != "gonix" {
@@ -52,6 +53,7 @@ func TestClientEvalCompositeValues(t *testing.T) {
 		Items  []string       `nix:"items" validate:"required"`
 	}
 	if err := client.Eval(
+		context.Background(),
 		`{ name = "demo"; values = { one = 1; two = 2; }; items = [ "a" "b" ]; }`,
 		&record,
 	); err != nil {
@@ -74,7 +76,7 @@ func TestClientEvalErrors(t *testing.T) {
 
 	t.Run("invalid expression", func(t *testing.T) {
 		var out int
-		err := client.Eval("let =", &out)
+		err := client.Eval(context.Background(), "let =", &out)
 		var nixErr *Error
 		if !errors.As(err, &nixErr) {
 			t.Fatalf("Client.Eval(invalid expression) error = %v, want Nix Error", err)
@@ -105,7 +107,7 @@ func TestClientEvalErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := client.Eval("1", tt.out)
+			err := client.Eval(context.Background(), "1", tt.out)
 			switch tt.want.(type) {
 			case *eval.InvalidUnmarshalError:
 				var target *eval.InvalidUnmarshalError
@@ -127,7 +129,7 @@ func TestClientEvalLifecycle(t *testing.T) {
 
 	for i := range 100 {
 		var out int
-		if err := client.Eval("40 + 2", &out); err != nil {
+		if err := client.Eval(context.Background(), "40 + 2", &out); err != nil {
 			t.Fatalf("Client.Eval() call %d error = %v", i, err)
 		}
 		if out != 42 {
@@ -140,7 +142,7 @@ func TestClientEvalLifecycle(t *testing.T) {
 	}
 
 	var out int
-	if err := client.Eval("1", &out); !errors.Is(err, ErrClosed) {
+	if err := client.Eval(context.Background(), "1", &out); !errors.Is(err, ErrClosed) {
 		t.Fatalf("Client.Eval() after Close error = %v, want ErrClosed", err)
 	}
 }

@@ -16,10 +16,11 @@ The SDK has two entry layers:
 generated bindings, call private Nix C++ APIs, add ad hoc cgo, or shell out to
 the `nix` CLI for core SDK behavior.
 
-`nix-go-bindings v0.2.0` owns a narrow C++ flake adapter for resolved lock JSON
-and Nix's locked-flake fingerprint because upstream libflake-c does not expose
-those operations. Gonix consumes only the generated Go functions and does not
-depend on private Nix headers directly.
+`nix-go-bindings v0.3.0` owns narrow C++ adapters for callback-free store
+results and resolved flake data. Store GC root discovery and garbage collection
+return opaque result handles. Flake adapters provide resolved lock JSON and
+Nix's locked-flake fingerprint. Gonix consumes only the generated Go functions
+and does not depend on private Nix headers directly.
 
 Raw generated context pointers never cross public constructor boundaries.
 Public constructors receive `*nixcontext.Context`. Narrow integration points
@@ -39,6 +40,8 @@ a substitute for object-specific lifecycle APIs.
 `Client` is the primary user-facing object:
 
 ```go
+ctx := context.Background()
+
 client, err := gonix.NewClient(gonix.ClientConfig{})
 defer client.Close()
 
@@ -49,14 +52,16 @@ var pkg struct {
     Name    string `nix:"name"`
     DrvPath string `nix:"drvPath"`
 }
-err = f.Output(
+err = client.EvalFlakeOutput(
+    ctx,
+    f,
     []string{"legacyPackages", gonix.DefaultSystem(), "hello"},
     &pkg,
 )
-outputs, err := client.Realize(pkg.DrvPath)
+outputs, err := client.Realize(ctx, pkg.DrvPath)
 
 var result int
-err = client.Eval("1 + 2", &result)
+err = client.Eval(ctx, "1 + 2", &result)
 ```
 
 `ClientConfig{}` is flake-ready. It preserves Nix defaults while enabling
@@ -69,23 +74,30 @@ Client owns:
 - fetcher and flake settings;
 - one default Store and Evaluator.
 
-Every Flake returned by `Client.OpenFlake` is caller-owned and must be closed
-before the Client. Client closes its evaluator, store, settings, and context in
-reverse dependency order.
+Every Flake returned by `Client.OpenFlake` may be closed early by the caller.
+Client tracks all returned flakes and closes any remaining ones before its
+evaluator, store, settings, and context.
+
+Client high-level operations accept a `context.Context` and are serialized.
+Overlapping use returns `ErrConcurrentUse`. Cancellation requests Nix's
+cooperative process interrupt, interrupts active store I/O through a separate
+Nix context, waits for the native operation to return, clears the interrupt,
+and closes the Client because an interrupted remote store cannot be reused.
 
 `Client.Eval` is the resource-safe convenience path for evaluating a Nix
 expression directly into Go data. Advanced callers that need raw values or a
 custom diagnostic path use `eval.Evaluator`.
 
-`Flake.Output` provides the corresponding resource-safe path for decoding any
-locked flake output. Attribute paths are represented as string slices so every
-element names one exact Nix attribute without parsing or escaping rules.
+`Client.EvalFlakeOutput` provides the corresponding resource-safe path for
+decoding any locked flake output. Attribute paths are represented as string
+slices so every element names one exact Nix attribute without parsing or
+escaping rules.
 
-`Flake.OutputValue` returns the final selected output as a caller-owned
-`eval.Value`. Each attribute getter creates an independent Nix reference, so
-the method closes intermediate values immediately while the returned value
-remains live. `Client.Unmarshal` decodes such a value using the Client's hidden
-evaluator.
+`Client.GetFlakeOutputValue` returns the final selected output as a
+caller-owned `eval.Value`. Each attribute getter creates an independent Nix
+reference, so the method closes intermediate values immediately while the
+returned value remains live. `Client.Unmarshal` decodes such a value using the
+Client's hidden evaluator.
 
 `Client.Realize` realizes a derivation store path and converts every resulting
 store path into a Go-owned `RealizedOutput`.
@@ -152,7 +164,7 @@ General context settings live on `nixcontext.Context`, not Client:
 | `gonix` | `Client`, `ClientConfig`, `RealizedOutput` | High-level evaluation, flake opening, realization, and resource orchestration. |
 | `nixcontext` | `Context`, `Config`, verbosity and log types | Nix context bootstrap, settings, raw context lifecycle. |
 | `storepath` | `Path` | Owned Nix store path handles. |
-| `store` | `Store`, `Derivation`, `DerivationData`, `Realization`, `Closure` | Store-backed paths, derivations, realization, closures, and copying. |
+| `store` | `Store`, `Derivation`, `DerivationData`, `Realization`, `Closure`, `GCRoot`, `GCResult` | Store-backed paths, derivations, realization, closures, GC roots and collection, and copying. |
 | `eval` | `Evaluator`, `Value`, builders, realized strings | Evaluation states and values tied to an evaluator. |
 | `fetchers` | `Settings` | Fetcher settings lifecycle. |
 | `flakesettings` | `Settings` | Flake settings lifecycle and evaluator integration. |
@@ -204,7 +216,7 @@ flowchart TD
     Client -->|owns| FlakeSettings
     Client -->|owns| Store
     Client -->|owns| Eval
-    Client -->|creates| Flake
+    Client -->|creates and tracks| Flake
 
     Fetchers -->|borrows| Context
     FlakeSettings -->|borrows| Context
@@ -233,11 +245,21 @@ unless explicitly documented.
 
 Caller-owned resources must be closed before the resources they borrow:
 
-- every `flake.Flake` returned by `Client.OpenFlake` before its Client;
+- every `flake.Flake` created through advanced composition before its borrowed
+  resources; Client-managed flakes may instead be left for `Client.Close`;
 - every `eval.Value` before its Context, preferably before its Evaluator.
 
 Closing an Evaluator invalidates operations on its Values. Those Values may
 still be closed after the Evaluator while their Context remains open.
+
+Store GC result handles and cloned root paths are temporary implementation
+details: gonix converts them to Go strings and frees every native allocation
+before returning. `Store.FindRoots` therefore returns `[]GCRoot` with no
+lifecycle requirements. Root creation and specific-path collection accept
+store path strings and parse temporary `storepath.Path` handles internally.
+Garbage collection is unlimited by default, while an explicit zero-byte limit
+remains representable through `WithGCMaxFreed(0)`. Ignoring root liveness is
+exposed only as an explicit, documented dangerous option.
 
 ## Error handling
 
@@ -253,7 +275,8 @@ still be closed after the Evaluator while their Context remains open.
 
 ## Public workflow boundaries
 
-- `Client.OpenFlake` is the ordinary caller-owned constructor.
+- `Client.OpenFlake` creates a caller-accessible, Client-tracked Flake that may
+  be closed early.
 - `Client.Eval` evaluates and unmarshals an expression without exposing a raw
   Nix value.
 - `Client.Unmarshal` decodes a caller-owned value created by the Client's
@@ -262,10 +285,10 @@ still be closed after the Evaluator while their Context remains open.
 - `Flake.LockInfo` and `Flake.Fingerprint` expose cached lock metadata without
   requiring live Nix resources; each `LockInfo` call returns a freshly decoded
   graph whose maps, slices, and raw JSON bytes are caller-owned.
-- `Flake.Output(path, out)` traverses and unmarshals exact locked-output
-  attributes.
-- `Flake.OutputValue(path)` returns a caller-owned final output value and closes
-  intermediate traversal values.
-- `Client.Realize(drvPath)` realizes a derivation path and returns Go-owned
-  output DTOs.
+- `Client.EvalFlakeOutput(ctx, flake, path, out)` traverses and unmarshals exact
+  locked-output attributes.
+- `Client.GetFlakeOutputValue(ctx, flake, path)` returns a caller-owned final
+  output value and closes intermediate traversal values.
+- `Client.Realize(ctx, drvPath)` realizes a derivation path and returns
+  Go-owned output DTOs.
 - Package discovery, indexing, and metadata policy stay outside gonix.

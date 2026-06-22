@@ -2,9 +2,10 @@
 //
 // The package is the high-level entry point for operations that need an open
 // Nix store: path parsing, metadata lookup, derivation import/export,
-// realization, closure traversal, and copying paths between stores. Returned
-// resource wrappers own their underlying Nix handles unless their documentation
-// says otherwise, and must be closed by the caller.
+// realization, closure traversal, GC roots, garbage collection, and copying
+// paths between stores. Returned resource wrappers own their underlying Nix
+// handles unless their documentation says otherwise, and must be closed by the
+// caller.
 package store
 
 import (

@@ -18,7 +18,6 @@ import (
 // Value before closing the Evaluator.
 type Evaluator struct {
 	ctx   *nixcontext.Context
-	store *store.Store
 	state *nix.EvalState
 }
 
@@ -71,7 +70,6 @@ func New(ctx *nixcontext.Context, s *store.Store, opts ...Option) (*Evaluator, e
 
 	return &Evaluator{
 		ctx:   ctx,
-		store: s,
 		state: state,
 	}, nil
 }
@@ -122,7 +120,6 @@ func (e *Evaluator) Close() error {
 
 	nix.StateFree(e.state)
 	e.state = nil
-	e.store = nil
 	e.ctx = nil
 
 	return nil

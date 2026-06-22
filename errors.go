@@ -6,6 +6,8 @@ import (
 	"github.com/sund3RRR/gonix/internal/status"
 )
 
+// ErrConcurrentUse is returned when a Client operation overlaps another
+// operation or Close call on the same Client.
 var ErrConcurrentUse = errors.New("gonix: concurrent use of Client is not supported")
 
 // ErrClosed is returned when an operation is attempted after a wrapper has been closed.

@@ -9,6 +9,11 @@ import (
 	"github.com/sund3RRR/nix-go-bindings"
 )
 
+// StoreInterrupt requests interruption of active operations on s.
+//
+// ctx must be distinct from the context used by the operation being
+// interrupted. A remotely interrupted Store must be discarded after the
+// operation returns.
 func StoreInterrupt(ctx *nixcontext.Context, s *store.Store) error {
 	rawCtx, err := ctx.Borrow()
 	if err != nil {
@@ -27,14 +32,17 @@ func StoreInterrupt(ctx *nixcontext.Context, s *store.Store) error {
 	return nil
 }
 
+// InterruptRequest sets Nix's process-global cooperative interruption flag.
 func InterruptRequest() {
 	nix.InterruptRequest()
 }
 
-func InterruptRequested() {
-	nix.InterruptRequested()
+// InterruptRequested reports whether process-global interruption is pending.
+func InterruptRequested() bool {
+	return nix.InterruptRequested()
 }
 
+// InterruptClear clears Nix's process-global cooperative interruption flag.
 func InterruptClear() {
 	nix.InterruptClear()
 }

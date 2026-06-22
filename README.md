@@ -14,6 +14,8 @@ locked flakes, realised outputs, closures, settings, and structured errors.
 ## Quick start
 
 ```go
+ctx := context.Background()
+
 client, err := gonix.NewClient(gonix.ClientConfig{})
 if err != nil {
 	return err
@@ -30,11 +32,13 @@ var pkg struct {
 	Name    string `nix:"name" validate:"required"`
 	DrvPath string `nix:"drvPath" validate:"required"`
 }
-err = f.Output(
+err = client.EvalFlakeOutput(
+	ctx,
+	f,
 	[]string{"legacyPackages", gonix.DefaultSystem(), "hello"},
 	&pkg,
 )
-outputs, err := client.Realize(pkg.DrvPath)
+outputs, err := client.Realize(ctx, pkg.DrvPath)
 ```
 
 ## Implementation status
@@ -53,6 +57,7 @@ composition.
   - [x] Store path parsing, cloning, hash/name access, and lifecycle handling.
   - [x] Filesystem closure traversal.
   - [x] Path and closure copying between stores.
+  - [x] GC roots, live/dead queries, and garbage collection.
 - [x] Initial derivation support.
   - [x] Derivation import/export and cloning.
   - [x] Store-backed derivation helpers.
@@ -89,7 +94,7 @@ var result struct {
 	Flags   map[string]bool `nix:"flags" validate:"required"`
 }
 
-err := client.Eval(`{
+err := client.Eval(ctx, `{
   message = "hello from Nix";
   ports = [ 80 443 ];
   flags = { tls = true; };
@@ -99,6 +104,11 @@ err := client.Eval(`{
 Evaluation supports ordinary Nix language semantics, including functions,
 imports, laziness, builtins, conditionals, attribute sets, and lists, subject
 to the configured evaluator and enabled Nix features.
+
+High-level operations accept a `context.Context`. Cancellation requests Nix
+interruption, waits for the native operation to stop, and closes the Client
+because interrupted remote stores cannot be reused safely. A Client permits
+only one operation at a time and reports `ErrConcurrentUse` for overlaps.
 
 The unmarshaller currently supports:
 
@@ -117,12 +127,14 @@ lower-level `eval` package to work with caller-owned Nix values directly.
 
 ## Flake outputs and realization
 
-`Flake.Output` traverses the output attributes of the locked flake and decodes
-the selected value into Go data:
+`Client.EvalFlakeOutput` traverses the output attributes of a locked flake and
+decodes the selected value into Go data:
 
 ```go
 var packageName string
-err := f.Output(
+err := client.EvalFlakeOutput(
+	ctx,
+	f,
 	[]string{"legacyPackages", gonix.DefaultSystem(), "hello", "name"},
 	&packageName,
 )
@@ -136,7 +148,9 @@ Advanced workflows can keep the selected output as a caller-owned
 `*eval.Value`:
 
 ```go
-value, err := f.OutputValue(
+value, err := client.GetFlakeOutputValue(
+	ctx,
+	f,
 	[]string{"legacyPackages", gonix.DefaultSystem(), "hello"},
 )
 defer value.Close()
@@ -145,15 +159,16 @@ var pkg struct {
 	Name    string `nix:"name" validate:"required"`
 	DrvPath string `nix:"drvPath" validate:"required"`
 }
-err = client.Unmarshal(value, &pkg)
+err = client.Unmarshal(ctx, value, &pkg)
 ```
 
 Every attribute lookup returns an independently referenced Nix value.
-`OutputValue` closes intermediate values during traversal and transfers
+`GetFlakeOutputValue` closes intermediate values during traversal and transfers
 ownership of only the final value to the caller. The value must be closed before
 its Client.
 
-`Client.Realize` builds or substitutes every output of a derivation path and
+`Client.Realize(ctx, drvPath)` builds or substitutes every output of a
+derivation path and
 returns Go-owned `RealizedOutput` values. Gonix intentionally leaves package
 discovery, package metadata normalization, indexing, and policy to higher-level
 package managers.

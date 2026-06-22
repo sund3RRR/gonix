@@ -20,9 +20,10 @@ import (
 // Client owns the resources for high-level Nix workflows.
 //
 // Client owns a hidden Nix context, a default store and evaluator, fetcher and
-// flake settings. Flakes created through OpenFlake are caller-owned and must be
-// closed before the Client. Client is not goroutine-safe. Close releases owned
-// resources in reverse dependency order.
+// flake settings. Flakes created through OpenFlake may be closed early by the
+// caller and are otherwise closed by Client.Close. Client is not goroutine-safe
+// and rejects overlapping operations with ErrConcurrentUse. Close releases
+// owned resources in reverse dependency order.
 type Client struct {
 	busy atomic.Bool
 
@@ -93,18 +94,34 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 	return c, nil
 }
 
+// WithStore runs handler with the Client's owned Store.
+//
+// The operation participates in Client cancellation and exclusive-use
+// handling. The Store is borrowed and must not be closed or retained by
+// handler.
 func (c *Client) WithStore(ctx context.Context, handler func(*store.Store) error) error {
 	return c.middleware(ctx, func() error {
 		return handler(c.store)
 	})
 }
 
+// WithEvaluator runs handler with the Client's owned Evaluator.
+//
+// The operation participates in Client cancellation and exclusive-use
+// handling. The Evaluator is borrowed and must not be closed or retained by
+// handler.
 func (c *Client) WithEvaluator(ctx context.Context, handler func(*eval.Evaluator) error) error {
 	return c.middleware(ctx, func() error {
 		return handler(c.evaluator)
 	})
 }
 
+// WithStoreAndEvaluator runs handler with the Client's owned Store and
+// Evaluator.
+//
+// The operation participates in Client cancellation and exclusive-use
+// handling. Both resources are borrowed and must not be closed or retained by
+// handler.
 func (c *Client) WithStoreAndEvaluator(ctx context.Context, handler func(*store.Store, *eval.Evaluator) error) error {
 	return c.middleware(ctx, func() error {
 		return handler(c.store, c.evaluator)
@@ -113,7 +130,8 @@ func (c *Client) WithStoreAndEvaluator(ctx context.Context, handler func(*store.
 
 // OpenFlake parses and locks ref.
 //
-// The returned Flake is owned by the caller and must be closed before c.
+// The returned Flake may be closed early by the caller. If it remains open,
+// Client.Close closes it before releasing the resources it borrows.
 func (c *Client) OpenFlake(ref string, opts ...flake.Option) (*flake.Flake, error) {
 	var f *flake.Flake
 	err := c.middleware(context.Background(), func() error {
@@ -258,6 +276,10 @@ func (c *Client) Realize(ctx context.Context, drvPath string) ([]RealizedOutput,
 	return result, err
 }
 
+// Close releases flakes created by the Client, followed by its evaluator,
+// store, settings, and context.
+//
+// Close is idempotent. It attempts every cleanup and joins multiple errors.
 func (c *Client) Close() error {
 	if !c.busy.CompareAndSwap(false, true) {
 		return ErrConcurrentUse
@@ -267,9 +289,6 @@ func (c *Client) Close() error {
 	return c.closeLocked()
 }
 
-// Close releases the evaluator, store, settings, and context.
-//
-// Close is idempotent. It attempts every cleanup and joins multiple errors.
 func (c *Client) closeLocked() error {
 	if c.ctx == nil {
 		return nil
@@ -349,7 +368,7 @@ func (c *Client) getOutputValue(f *flake.Flake, root *eval.Value, path []string)
 		// to the caller. No defer is installed for this value.
 		return root, nil
 	}
-	defer root.Close()
+	defer root.Close() //nolint:errcheck
 
 	attr := path[0]
 
@@ -406,7 +425,7 @@ func (c *Client) middleware(ctx context.Context, handler func() error) error {
 			closeErr := c.closeLocked()
 			return errors.Join(ctx.Err(), err, opErr, closeErr)
 		}
-		defer interruptCtx.Close()
+		defer interruptCtx.Close() //nolint:errcheck
 
 		// interrupt the remote store (if any)
 		interruptErr := util.StoreInterrupt(interruptCtx, c.store)
