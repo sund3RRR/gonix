@@ -39,6 +39,30 @@
 
           pkgConfigPath = lib.makeSearchPath "lib/pkgconfig" (map lib.getDev nixLibs);
 
+          mkDevShell =
+            {
+              packages ? [ ],
+              shellHook ? "",
+            }:
+            pkgs.mkShell {
+              packages =
+                [
+                  pkgs.go
+                  pkgs.c-for-go
+                  pkgs.pkg-config
+                  pkgs.golangci-lint
+                ]
+                ++ nixLibs
+                ++ packages;
+
+              shellHook = ''
+                export CGO_ENABLED=1
+                export CGO_CFLAGS_ALLOW=--isystem.*
+                export CGO_CXXFLAGS_ALLOW=--isystem.*
+                export PKG_CONFIG_PATH="${pkgConfigPath}''${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+              '' + shellHook;
+            };
+
           generateGoBindingsTool =
             pkgs.writeShellApplication {
               name = "generate-go-bindings";
@@ -87,6 +111,7 @@
             nixCppLibs
             nixLibs
             pkgConfigPath
+            mkDevShell
             generateGoBindingsTool
             ;
         };
@@ -115,27 +140,25 @@
         }
       );
 
+      lib = forAllSystems (
+        system:
+        let
+          env = perSystem system;
+        in
+        {
+          mkDevShell = env.mkDevShell;
+          nixLibs = env.nixLibs;
+          pkgConfigPath = env.pkgConfigPath;
+        }
+      );
+
       devShells = forAllSystems (
         system:
         let
           env = perSystem system;
         in
         {
-          default = env.pkgs.mkShell {
-            packages = [
-              env.pkgs.go
-              env.pkgs.c-for-go
-              env.pkgs.pkg-config
-              env.pkgs.golangci-lint
-            ] ++ env.nixLibs;
-
-            shellHook = ''
-              export CGO_ENABLED=1
-              export CGO_CFLAGS_ALLOW=--isystem.*
-              export CGO_CXXFLAGS_ALLOW=--isystem.*
-              export PKG_CONFIG_PATH="${env.pkgConfigPath}''${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
-            '';
-          };
+          default = env.mkDevShell { };
         }
       );
     };
