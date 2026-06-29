@@ -80,6 +80,13 @@ Every Flake returned by `Client.OpenFlake` may be closed early by the caller.
 Client tracks all returned flakes and closes any remaining ones before its
 evaluator, store, settings, and context.
 
+`Client.OpenFlakeFromLock` opens the same kind of Client-tracked Flake using a
+caller-provided `flake.LockInfo` as Nix's reference lock graph. The root flake
+reference still identifies the `flake.nix` and outputs; the lock graph pins the
+inputs. This path uses Nix's lock machinery with an in-memory reference lock
+file and defaults to check mode so stale lock graphs fail instead of silently
+updating.
+
 Client high-level operations accept a `context.Context` and are serialized.
 Overlapping use returns `ErrConcurrentUse`. Cancellation requests Nix's
 cooperative process interrupt, interrupts active store I/O through a separate
@@ -123,10 +130,11 @@ defer e.Close()
 owns only the raw Nix context and does not track children. Every child must be
 closed before its Context.
 
-The `flake.New` constructor is an advanced composition point. All arguments
-must belong to the same object graph. Store and fetcher settings are borrowed
-only during construction; Context, flake settings, and Evaluator must outlive
-raw operations on the returned Flake.
+The `flake.New` constructor is an advanced composition point. `flake.NewFromLock`
+adds the same composition path with a caller-provided `LockInfo` reference lock.
+All arguments must belong to the same object graph. Store and fetcher settings
+are borrowed only during construction; Context, flake settings, and Evaluator
+must outlive raw operations on the returned Flake.
 
 During construction, `flake.New` decodes and caches Nix-normalized lock metadata
 and Nix's optional locked-flake fingerprint. Lock graph access never re-locks, reads
@@ -290,11 +298,14 @@ exposed only as an explicit, documented dangerous option.
 
 - `Client.OpenFlake` creates a caller-accessible, Client-tracked Flake that may
   be closed early.
+- `Client.OpenFlakeFromLock` does the same while using a caller-provided
+  `flake.LockInfo` as the reference lock graph for the root flake reference.
 - `Client.Eval` evaluates and unmarshals an expression without exposing a raw
   Nix value.
 - `Client.Unmarshal` decodes a caller-owned value created by the Client's
   evaluator.
-- `flake.New` is the explicitly assembled advanced constructor.
+- `flake.New` and `flake.NewFromLock` are the explicitly assembled advanced
+  constructors.
 - `Flake.LockInfo` and `Flake.Fingerprint` expose cached lock metadata without
   requiring live Nix resources; each `LockInfo` call returns a freshly decoded
   graph whose maps, slices, and raw JSON bytes are caller-owned.

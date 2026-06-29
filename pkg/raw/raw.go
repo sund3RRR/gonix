@@ -943,7 +943,22 @@ func FlakeLockFlagsAddInputOverride(ctx *NixCContext, flags *NixFlakeLockFlags, 
 	return __v
 }
 
-// FlakeLock function as declared in raw/nix_go_flake.h:80
+// FlakeLockFlagsSetReferenceLockJson function as declared in raw/nix_go_flake.h:79
+func FlakeLockFlagsSetReferenceLockJson(ctx *NixCContext, flags *NixFlakeLockFlags, lockJson string, lockJsonLen uint64) NixErr {
+	cctx, cctxAllocMap := (*C.nix_c_context)(unsafe.Pointer(ctx)), cgoAllocsUnknown
+	cflags, cflagsAllocMap := (*C.nix_flake_lock_flags)(unsafe.Pointer(flags)), cgoAllocsUnknown
+	clockJson, clockJsonAllocMap := unpackPCharString(lockJson)
+	clockJsonLen, clockJsonLenAllocMap := (C.size_t)(lockJsonLen), cgoAllocsUnknown
+	__ret := C.go_nix_flake_lock_flags_set_reference_lock_json(cctx, cflags, clockJson, clockJsonLen)
+	runtime.KeepAlive(clockJsonLenAllocMap)
+	runtime.KeepAlive(clockJsonAllocMap)
+	runtime.KeepAlive(cflagsAllocMap)
+	runtime.KeepAlive(cctxAllocMap)
+	__v := (NixErr)(__ret)
+	return __v
+}
+
+// FlakeLock function as declared in raw/nix_go_flake.h:86
 func FlakeLock(ctx *NixCContext, fetchSettings *NixFetchersSettings, flakeSettings *NixFlakeSettings, evalState *EvalState, flags *NixFlakeLockFlags, flakeReference *NixFlakeReference) *NixLockedFlake {
 	cctx, cctxAllocMap := (*C.nix_c_context)(unsafe.Pointer(ctx)), cgoAllocsUnknown
 	cfetchSettings, cfetchSettingsAllocMap := (*C.nix_fetchers_settings)(unsafe.Pointer(fetchSettings)), cgoAllocsUnknown
@@ -962,14 +977,14 @@ func FlakeLock(ctx *NixCContext, fetchSettings *NixFetchersSettings, flakeSettin
 	return __v
 }
 
-// LockedFlakeFree function as declared in raw/nix_go_flake.h:88
+// LockedFlakeFree function as declared in raw/nix_go_flake.h:94
 func LockedFlakeFree(lockedFlake *NixLockedFlake) {
 	clockedFlake, clockedFlakeAllocMap := (*C.nix_locked_flake)(unsafe.Pointer(lockedFlake)), cgoAllocsUnknown
 	C.go_nix_locked_flake_free(clockedFlake)
 	runtime.KeepAlive(clockedFlakeAllocMap)
 }
 
-// LockedFlakeGetLockJson function as declared in raw/nix_go_flake.h:89
+// LockedFlakeGetLockJson function as declared in raw/nix_go_flake.h:95
 func LockedFlakeGetLockJson(ctx *NixCContext, lockedFlake *NixLockedFlake) *byte {
 	cctx, cctxAllocMap := (*C.nix_c_context)(unsafe.Pointer(ctx)), cgoAllocsUnknown
 	clockedFlake, clockedFlakeAllocMap := (*C.nix_locked_flake)(unsafe.Pointer(lockedFlake)), cgoAllocsUnknown
@@ -980,7 +995,7 @@ func LockedFlakeGetLockJson(ctx *NixCContext, lockedFlake *NixLockedFlake) *byte
 	return __v
 }
 
-// LockedFlakeGetFingerprint function as declared in raw/nix_go_flake.h:93
+// LockedFlakeGetFingerprint function as declared in raw/nix_go_flake.h:99
 func LockedFlakeGetFingerprint(ctx *NixCContext, store *Store, fetchSettings *NixFetchersSettings, lockedFlake *NixLockedFlake) *byte {
 	cctx, cctxAllocMap := (*C.nix_c_context)(unsafe.Pointer(ctx)), cgoAllocsUnknown
 	cstore, cstoreAllocMap := (*C.Store)(unsafe.Pointer(store)), cgoAllocsUnknown
@@ -995,7 +1010,7 @@ func LockedFlakeGetFingerprint(ctx *NixCContext, store *Store, fetchSettings *Ni
 	return __v
 }
 
-// LockedFlakeGetOutputAttrs function as declared in raw/nix_go_flake.h:99
+// LockedFlakeGetOutputAttrs function as declared in raw/nix_go_flake.h:105
 func LockedFlakeGetOutputAttrs(ctx *NixCContext, settings *NixFlakeSettings, evalState *EvalState, lockedFlake *NixLockedFlake) *NixValue {
 	cctx, cctxAllocMap := (*C.nix_c_context)(unsafe.Pointer(ctx)), cgoAllocsUnknown
 	csettings, csettingsAllocMap := (*C.nix_flake_settings)(unsafe.Pointer(settings)), cgoAllocsUnknown

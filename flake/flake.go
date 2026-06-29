@@ -117,6 +117,17 @@ func New(
 		return nil, fmt.Errorf("flake: failed to set lock mode: %w", err)
 	}
 
+	// Apply caller-provided reference lock info.
+	if cfg.referenceLockInfo != nil {
+		lockJSON, err := json.Marshal(*cfg.referenceLockInfo)
+		if err != nil {
+			return nil, fmt.Errorf("flake: failed to encode reference lock info: %w", err)
+		}
+		if code := raw.FlakeLockFlagsSetReferenceLockJson(rawCtx, lockFlags, string(lockJSON), uint64(len(lockJSON))); status.ErrorCode(code) != status.ErrorCodeOK {
+			return nil, fmt.Errorf("flake: failed to set reference lock info: %w", status.FromContext(rawCtx))
+		}
+	}
+
 	// Apply flake's input overrides
 	for _, override := range cfg.inputOverrides {
 		// Allocate and defer free input override flake reference result

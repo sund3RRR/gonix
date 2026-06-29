@@ -4,9 +4,10 @@ package flake
 type Option func(*flakeConfig)
 
 type flakeConfig struct {
-	baseDirectory  string
-	mode           LockMode
-	inputOverrides []inputOverride
+	baseDirectory     string
+	mode              LockMode
+	inputOverrides    []inputOverride
+	referenceLockInfo *LockInfo
 }
 
 type inputOverride struct {
@@ -35,5 +36,11 @@ func WithInputOverride(inputPath string, ref string) Option {
 func WithBaseDirectory(path string) Option {
 	return func(c *flakeConfig) {
 		c.baseDirectory = path
+	}
+}
+
+func WithReferenceLockInfo(lockInfo LockInfo) Option {
+	return func(c *flakeConfig) {
+		c.referenceLockInfo = &lockInfo
 	}
 }

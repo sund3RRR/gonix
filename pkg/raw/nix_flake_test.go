@@ -531,6 +531,71 @@ func TestNixFlakeLockAndOutputAttrs(t *testing.T) {
 	LockedFlakeFree(lockedFlake)
 }
 
+func TestNixFlakeReferenceLockJSON(t *testing.T) {
+	ctx, _, fetchSettings, flakeSettings, state := newTestFlakeState(t)
+
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("EvalSymlinks(flake root): %v", err)
+	}
+	writeTestFlake(t, filepath.Join(root, "dep"), `
+{
+  outputs = { ... }: {
+    hello = "locked";
+  };
+}
+`)
+	writeTestFlake(t, filepath.Join(root, "root"), `
+{
+  inputs.dep.url = "`+filepath.ToSlash(filepath.Join(root, "dep"))+`";
+  outputs = { dep, ... }: {
+    hello = dep.hello;
+  };
+}
+`)
+
+	parseFlags := newFlakeParseFlags(t, ctx, flakeSettings, root)
+	reference, _ := parseTestFlakeReference(t, ctx, fetchSettings, flakeSettings, parseFlags, "./root")
+
+	lockFlags := FlakeLockFlagsNew(ctx, flakeSettings)
+	if lockFlags == nil {
+		t.Fatalf("FlakeLockFlagsNew returned nil: err=%v msg=%q", ErrCode(ctx), errMsgString(t, ctx))
+	}
+	t.Cleanup(func() {
+		FlakeLockFlagsFree(lockFlags)
+	})
+
+	if got := FlakeLockFlagsSetModeVirtual(ctx, lockFlags); got != NixOk {
+		t.Fatalf("FlakeLockFlagsSetModeVirtual = %v, want %v: %s", got, NixOk, errMsgString(t, ctx))
+	}
+	lockedFlake := FlakeLock(ctx, fetchSettings, flakeSettings, state, lockFlags, reference)
+	if lockedFlake == nil {
+		t.Fatalf("FlakeLock in virtual mode returned nil: err=%v msg=%q", ErrCode(ctx), errMsgString(t, ctx))
+	}
+	lockJSON := ownedCString(t, LockedFlakeGetLockJson(ctx, lockedFlake))
+	LockedFlakeFree(lockedFlake)
+
+	if _, err := os.Stat(filepath.Join(root, "root", "flake.lock")); !os.IsNotExist(err) {
+		t.Fatalf("virtual lock flake.lock stat err = %v, want not exist", err)
+	}
+
+	if got := FlakeLockFlagsSetModeCheck(ctx, lockFlags); got != NixOk {
+		t.Fatalf("FlakeLockFlagsSetModeCheck = %v, want %v: %s", got, NixOk, errMsgString(t, ctx))
+	}
+	if got := FlakeLockFlagsSetReferenceLockJson(ctx, lockFlags, lockJSON, uint64(len(lockJSON))); got != NixOk {
+		t.Fatalf("FlakeLockFlagsSetReferenceLockJson = %v, want %v: %s", got, NixOk, errMsgString(t, ctx))
+	}
+
+	lockedFlake = FlakeLock(ctx, fetchSettings, flakeSettings, state, lockFlags, reference)
+	if lockedFlake == nil {
+		t.Fatalf("FlakeLock with reference lock JSON returned nil: err=%v msg=%q", ErrCode(ctx), errMsgString(t, ctx))
+	}
+	if got := lockedFlakeHello(t, ctx, flakeSettings, state, lockedFlake); got != "locked" {
+		t.Fatalf("reference lock hello = %q, want locked", got)
+	}
+	LockedFlakeFree(lockedFlake)
+}
+
 func TestNixFlakeLockFlagsAddInputOverrideEmptyPath(t *testing.T) {
 	ctx, _, fetchSettings, flakeSettings, _ := newTestFlakeState(t)
 
