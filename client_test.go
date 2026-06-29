@@ -272,6 +272,53 @@ func TestFlakeCachedLockMetadata(t *testing.T) {
 	}
 }
 
+func TestClientOpenFlakeFromLock(t *testing.T) {
+	depRef, _ := writeValueFlake(t, "locked")
+	ref, dir := writeFlake(t, fmt.Sprintf(`{
+  inputs.dep.url = %q;
+  outputs = { dep, ... }: {
+    value = dep.value;
+  };
+}
+`, depRef))
+	client := newTestClient(t)
+
+	original := openTestFlake(t, client, ref)
+	lockInfo, err := original.LockInfo()
+	if err != nil {
+		t.Fatalf("original Flake.LockInfo() error = %v", err)
+	}
+	fingerprint := original.Fingerprint()
+
+	if _, err := os.Stat(filepath.Join(dir, "flake.lock")); !os.IsNotExist(err) {
+		t.Fatalf("virtual lock flake.lock stat err = %v, want not exist", err)
+	}
+
+	fromLock, err := client.OpenFlakeFromLock(ref, lockInfo)
+	if err != nil {
+		t.Fatalf("Client.OpenFlakeFromLock() error = %v", err)
+	}
+	defer fromLock.Close() //nolint:errcheck
+
+	var value string
+	if err := client.EvalFlakeOutput(context.Background(), fromLock, []string{"value"}, &value); err != nil {
+		t.Fatalf("Client.EvalFlakeOutput(from lock) error = %v", err)
+	}
+	if value != "locked" {
+		t.Fatalf("from-lock value = %q, want locked", value)
+	}
+	if got := fromLock.Fingerprint(); got != fingerprint {
+		t.Fatalf("from-lock fingerprint = %q, want %q", got, fingerprint)
+	}
+	gotInfo, err := fromLock.LockInfo()
+	if err != nil {
+		t.Fatalf("from-lock Flake.LockInfo() error = %v", err)
+	}
+	if !reflect.DeepEqual(gotInfo, lockInfo) {
+		t.Fatalf("from-lock LockInfo = %#v, want %#v", gotInfo, lockInfo)
+	}
+}
+
 func TestFlakeFingerprintChangesWithInputOverride(t *testing.T) {
 	originalRef, _ := writeValueFlake(t, "original")
 	overrideRef, _ := writeValueFlake(t, "override")

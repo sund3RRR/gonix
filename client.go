@@ -147,6 +147,26 @@ func (c *Client) OpenFlake(ref string, opts ...flake.Option) (*flake.Flake, erro
 	return f, err
 }
 
+// OpenFlakeFromLock opens ref using lockInfo as the reference lock graph.
+//
+// The returned Flake may be closed early by the caller. If it remains open,
+// Client.Close closes it before releasing the resources it borrows.
+func (c *Client) OpenFlakeFromLock(ref string, lockInfo flake.LockInfo, opts ...flake.Option) (*flake.Flake, error) {
+	var f *flake.Flake
+	err := c.middleware(context.Background(), func() error {
+		var err error
+		f, err = flake.New(c.ctx, c.store, c.fetcherSettings, c.flakeSettings, c.evaluator, ref,
+			flake.WithLockMode(flake.LockModeCheck), flake.WithReferenceLockInfo(lockInfo))
+		if err != nil {
+			return fmt.Errorf("client: failed to create flake from lock info: %w", err)
+		}
+		c.resources = append(c.resources, f)
+
+		return nil
+	})
+	return f, err
+}
+
 // EvalFlakeOutput decodes a locked flake output selected by path into out.
 //
 // Each path element names one exact Nix attribute; dots have no special

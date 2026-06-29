@@ -165,6 +165,13 @@ lock, err := f.LockInfo()
 fingerprint := f.Fingerprint()
 ```
 
+The cached graph can be supplied later as a reference lock while opening the
+same root flake:
+
+```go
+f, err := client.OpenFlakeFromLock(ref, lock)
+```
+
 `LockInfo` types the lock graph, nodes, non-flake flags, and override parent
 paths. `LockInput.GetNode` and `LockInput.GetFollows` safely distinguish Nix's
 direct-node and follows-path JSON variants. Fetcher-specific `original` and

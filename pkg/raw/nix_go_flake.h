@@ -76,6 +76,12 @@ nix_err go_nix_flake_lock_flags_add_input_override(
     const char *input_path,
     nix_flake_reference *flake_reference
 );
+nix_err go_nix_flake_lock_flags_set_reference_lock_json(
+    nix_c_context *ctx,
+    nix_flake_lock_flags *flags,
+    const char *lock_json,
+    size_t lock_json_len
+);
 
 nix_locked_flake *go_nix_flake_lock(
     nix_c_context *ctx,
