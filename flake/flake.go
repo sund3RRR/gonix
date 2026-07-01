@@ -24,6 +24,7 @@ import (
 // LockInfo, and Fingerprint use cached metadata and remain available after Close
 // or closure of borrowed resources.
 type Flake struct {
+	ref           string
 	fragment      string
 	fingerprint   string
 	lockInfoJSON  []byte
@@ -186,6 +187,7 @@ func New(
 	}
 
 	f := &Flake{
+		ref:           ref,
 		fragment:      fragment,
 		lockInfoJSON:  lockJSON,
 		fingerprint:   fingerprint,
@@ -196,6 +198,11 @@ func New(
 	}
 
 	return f, nil
+}
+
+// Ref returns the original flake reference.
+func (f *Flake) Ref() string {
+	return f.ref
 }
 
 // Fragment returns the fragment parsed from the original flake reference.
