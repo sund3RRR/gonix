@@ -18,11 +18,11 @@ shell out to the `nix` CLI for core SDK behavior.
 
 `pkg/raw` contains the generated Go package, C/C++ shims, generator
 configuration, and low-level tests. Its narrow C++ adapters provide
-callback-free store results and resolved flake data. Store GC root discovery
-and garbage collection return opaque result handles. Flake adapters provide
-resolved lock JSON and Nix's locked-flake fingerprint. High-level gonix code
-consumes only the generated Go functions and does not depend on private Nix
-headers directly.
+callback-free store results, daemon connection processing, and resolved flake
+data. Store GC root discovery and garbage collection return opaque result
+handles. Flake adapters provide resolved lock JSON and Nix's locked-flake
+fingerprint. High-level gonix code consumes only the generated Go functions and
+does not depend on private Nix headers directly.
 
 Raw generated context pointers never cross public constructor boundaries.
 Public constructors receive `*nixcontext.Context`. Narrow integration points
@@ -110,6 +110,11 @@ Client's hidden evaluator.
 
 `Client.Realize` realizes a derivation store path and converts every resulting
 store path into a Go-owned `RealizedOutput`.
+
+`Client.ProcessDaemonConnection` serves one Nix daemon protocol connection
+using the Client's owned Store. It duplicates caller-provided file descriptors,
+passes the duplicates to Nix, and closes only the duplicates when the daemon
+operation returns.
 
 ### Advanced composition
 

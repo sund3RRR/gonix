@@ -57,6 +57,11 @@ Current bindings are intentionally close to the C layer. Strings returned by the
 shim are C-owned `*byte` values and must be released with `StringFree`.
 Store handles should be released with `StoreFree`.
 
+`DaemonProcessConnectionStore` serves one Nix daemon protocol connection with a
+borrowed `Store`. The descriptors are borrowed by the raw call and are not
+closed by Nix; higher layers must keep them open while the call runs and close
+them afterward when appropriate.
+
 `LogSinkInstall` adds a process-global logger that copies Nix events to either
 an append-only file or an existing Unix socket as newline-delimited
 `internal-json` records without the `@nix ` prefix. The sink remains installed
