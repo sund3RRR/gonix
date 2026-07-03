@@ -5,14 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"sort"
 	"sync/atomic"
+	"syscall"
 
 	"github.com/sund3RRR/gonix/eval"
 	"github.com/sund3RRR/gonix/fetchers"
 	"github.com/sund3RRR/gonix/flake"
 	"github.com/sund3RRR/gonix/flakesettings"
+	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/nixcontext"
+	"github.com/sund3RRR/gonix/pkg/raw"
 	"github.com/sund3RRR/gonix/store"
 	"github.com/sund3RRR/gonix/util"
 )
@@ -276,6 +280,55 @@ func (c *Client) Realize(ctx context.Context, drvPath string) ([]RealizedOutput,
 	return result, err
 }
 
+// ProcessDaemonConnection processes separate input and output file descriptors.
+//
+// ProcessDaemonConnection duplicates both descriptors, sets the duplicates to
+// blocking mode, and closes only the duplicates after Nix returns.
+func (c *Client) ProcessDaemonConnection(ctx context.Context, fromFD, toFD int, trusted, recursive bool) error {
+	return c.middleware(ctx, func() error {
+		rawCtx, err := c.ctx.Borrow()
+		if err != nil {
+			return fmt.Errorf("client: failed to borrow context: %w", err)
+		}
+
+		rawStore, err := c.store.Borrow()
+		if err != nil {
+			return fmt.Errorf("client: failed to borrow store: %w", err)
+		}
+
+		fromDup, err := duplicateFD(fromFD)
+		if err != nil {
+			return fmt.Errorf("client: failed to duplicate input fd: %w", err)
+		}
+
+		toDup, err := duplicateFD(toFD)
+		if err != nil {
+			closeErr := closeFD(fromDup)
+			return errors.Join(
+				fmt.Errorf("client: failed to duplicate output fd: %w", err),
+				closeErr,
+			)
+		}
+
+		code := raw.DaemonProcessConnectionStore(rawCtx, rawStore, int32(fromDup), int32(toDup), trusted, recursive)
+
+		var errs []error
+		if ErrorCode(code) != ErrorCodeOK {
+			errs = append(errs, fmt.Errorf("client: failed to process connection: %w", status.FromContext(rawCtx)))
+		}
+
+		if err := closeFD(fromDup); err != nil {
+			errs = append(errs, err)
+		}
+
+		if err := closeFD(toDup); err != nil {
+			errs = append(errs, err)
+		}
+
+		return errors.Join(errs...)
+	})
+}
+
 // Close releases flakes created by the Client, followed by its evaluator,
 // store, settings, and context.
 //
@@ -459,6 +512,38 @@ func applyClientSettings(ctx *nixcontext.Context, settings map[string]string) er
 		if err := ctx.SetSetting(key, settings[key]); err != nil {
 			return fmt.Errorf("client: failed to set %q: %w", key, err)
 		}
+	}
+
+	return nil
+}
+
+func duplicateFD(fd int) (int, error) {
+	if fd < 0 {
+		return -1, fmt.Errorf("fd must be non-negative")
+	}
+	if fd > math.MaxInt32 {
+		return -1, fmt.Errorf("fd %d overflows int32", fd)
+	}
+
+	dup, err := syscall.Dup(fd)
+	if err != nil {
+		return -1, err
+	}
+	if dup > math.MaxInt32 {
+		_ = syscall.Close(dup)
+		return -1, fmt.Errorf("duplicated fd %d overflows int32", dup)
+	}
+	if err := syscall.SetNonblock(dup, false); err != nil {
+		_ = syscall.Close(dup)
+		return -1, err
+	}
+
+	return dup, nil
+}
+
+func closeFD(fd int) error {
+	if err := syscall.Close(fd); err != nil {
+		return fmt.Errorf("client: failed to close duplicate fd %d: %w", fd, err)
 	}
 
 	return nil

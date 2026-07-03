@@ -8,6 +8,7 @@
 #include "nix_go_fetchers.h"
 #include "nix_go_expr.h"
 #include "nix_go_flake.h"
+#include "nix_go_daemon.h"
 #include "nix_go_main.h"
 #include <stdlib.h>
 #pragma once

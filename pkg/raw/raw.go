@@ -16,6 +16,7 @@ package raw
 #include "nix_go_fetchers.h"
 #include "nix_go_expr.h"
 #include "nix_go_flake.h"
+#include "nix_go_daemon.h"
 #include "nix_go_main.h"
 #include <stdlib.h>
 #include "cgo_helpers.h"
@@ -25,6 +26,25 @@ import (
 	"runtime"
 	"unsafe"
 )
+
+// DaemonProcessConnectionStore function as declared in raw/nix_go_daemon.h:13
+func DaemonProcessConnectionStore(ctx *NixCContext, store *Store, fromFd int32, toFd int32, trusted bool, recursive bool) NixErr {
+	cctx, cctxAllocMap := (*C.nix_c_context)(unsafe.Pointer(ctx)), cgoAllocsUnknown
+	cstore, cstoreAllocMap := (*C.Store)(unsafe.Pointer(store)), cgoAllocsUnknown
+	cfromFd, cfromFdAllocMap := (C.int)(fromFd), cgoAllocsUnknown
+	ctoFd, ctoFdAllocMap := (C.int)(toFd), cgoAllocsUnknown
+	ctrusted, ctrustedAllocMap := (C._Bool)(trusted), cgoAllocsUnknown
+	crecursive, crecursiveAllocMap := (C._Bool)(recursive), cgoAllocsUnknown
+	__ret := C.go_nix_daemon_process_connection_store(cctx, cstore, cfromFd, ctoFd, ctrusted, crecursive)
+	runtime.KeepAlive(crecursiveAllocMap)
+	runtime.KeepAlive(ctrustedAllocMap)
+	runtime.KeepAlive(ctoFdAllocMap)
+	runtime.KeepAlive(cfromFdAllocMap)
+	runtime.KeepAlive(cstoreAllocMap)
+	runtime.KeepAlive(cctxAllocMap)
+	__v := (NixErr)(__ret)
+	return __v
+}
 
 // LibexprInit function as declared in raw/nix_go_expr.h:57
 func LibexprInit(ctx *NixCContext) NixErr {

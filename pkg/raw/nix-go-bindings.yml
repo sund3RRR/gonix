@@ -8,6 +8,7 @@ GENERATOR:
     - nix_go_fetchers.h
     - nix_go_expr.h
     - nix_go_flake.h
+    - nix_go_daemon.h
     - nix_go_main.h
   PkgConfigOpts:
     - nix-util-c
@@ -33,6 +34,7 @@ PARSER:
     - nix_go_fetchers.h
     - nix_go_expr.h
     - nix_go_flake.h
+    - nix_go_daemon.h
     - nix_go_main.h
 
 TRANSLATOR:
