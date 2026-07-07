@@ -785,6 +785,14 @@ func TestNixStoreCallbackBackedAdapters(t *testing.T) {
 	}
 	StoreRealiseResultsFree(nil)
 
+	if got := StoreRealiseOutput(ctx, nil, nil, "out"); got != nil {
+		StorePathFree(got)
+		t.Fatal("StoreRealiseOutput(nil, nil, out) returned non-nil")
+	}
+	if msg := errMsgString(t, ctx); !strings.Contains(msg, "must not be null") {
+		t.Fatalf("ErrMsg after invalid StoreRealiseOutput = %q, want null argument message", msg)
+	}
+
 	results := StoreRealiseToArray(ctx, store, path)
 	if results != nil {
 		t.Cleanup(func() {

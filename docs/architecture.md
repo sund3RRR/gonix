@@ -109,7 +109,8 @@ returned value remains live. `Client.Unmarshal` decodes such a value using the
 Client's hidden evaluator.
 
 `Client.Realize` realizes a derivation store path and converts every resulting
-store path into a Go-owned `RealizedOutput`.
+store path into a Go-owned `RealizedOutput`. `Client.RealizeOutput` uses the
+same DTO conversion path while asking Nix to realize only one named output.
 
 `Client.ProcessDaemonConnection` serves one Nix daemon protocol connection
 using the Client's owned Store. It duplicates caller-provided file descriptors,
@@ -320,4 +321,6 @@ exposed only as an explicit, documented dangerous option.
   output value and closes intermediate traversal values.
 - `Client.Realize(ctx, drvPath)` realizes a derivation path and returns
   Go-owned output DTOs.
+- `Client.RealizeOutput(ctx, drvPath, outputName)` realizes exactly one named
+  derivation output and returns one Go-owned output DTO.
 - Package discovery, indexing, and metadata policy stay outside gonix.
