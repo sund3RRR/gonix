@@ -34,6 +34,9 @@ func TestNewClientZeroConfig(t *testing.T) {
 	if _, err := client.Realize(context.Background(), "/nix/store/00000000000000000000000000000000-demo.drv"); !errors.Is(err, ErrClosed) {
 		t.Fatalf("Client.Realize() after Close error = %v, want ErrClosed", err)
 	}
+	if _, err := client.RealizeOutput(context.Background(), "/nix/store/00000000000000000000000000000000-demo.drv", "out"); !errors.Is(err, ErrClosed) {
+		t.Fatalf("Client.RealizeOutput() after Close error = %v, want ErrClosed", err)
+	}
 	if err := client.Unmarshal(context.Background(), nil, new(int)); !errors.Is(err, ErrClosed) {
 		t.Fatalf("Client.Unmarshal() after Close error = %v, want ErrClosed", err)
 	}
@@ -558,6 +561,12 @@ func TestClientRealizeValidation(t *testing.T) {
 	if _, err := client.Realize(context.Background(), "not-a-store-path"); err == nil {
 		t.Fatal("Client.Realize(invalid path) error = nil")
 	}
+	if _, err := client.RealizeOutput(context.Background(), "not-a-store-path", "out"); err == nil {
+		t.Fatal("Client.RealizeOutput(invalid path) error = nil")
+	}
+	if _, err := client.RealizeOutput(context.Background(), "/nix/store/00000000000000000000000000000000-demo.drv", ""); err == nil {
+		t.Fatal("Client.RealizeOutput(empty output) error = nil")
+	}
 }
 
 func TestClientEvalAndRealizeFlow(t *testing.T) {
@@ -591,6 +600,38 @@ func TestClientEvalAndRealizeFlow(t *testing.T) {
 	}
 	if string(contents) != "gonix" {
 		t.Fatalf("realized output = %q, want gonix", contents)
+	}
+}
+
+func TestClientRealizeOutputReturnsSelectedOutput(t *testing.T) {
+	client := newTestClient(t)
+
+	var drvPath string
+	expr := fmt.Sprintf(`(derivation {
+  name = "gonix-client-selected-output";
+  system = %q;
+  builder = "/bin/sh";
+  outputs = [ "out" "dev" ];
+  args = [ "-c" "printf gonix-out > \"$out\"; printf gonix-dev > \"$dev\"" ];
+}).drvPath`, DefaultSystem())
+	if err := client.Eval(context.Background(), expr, &drvPath); err != nil {
+		t.Fatalf("Client.Eval(derivation) error = %v", err)
+	}
+
+	output, err := client.RealizeOutput(context.Background(), drvPath, "dev")
+	if err != nil {
+		t.Fatalf("Client.RealizeOutput(dev) error = %v", err)
+	}
+	if output.OutputName != "dev" {
+		t.Fatalf("output name = %q, want dev", output.OutputName)
+	}
+
+	contents, err := os.ReadFile(output.RealPath)
+	if err != nil {
+		t.Fatalf("read realized output: %v", err)
+	}
+	if string(contents) != "gonix-dev" {
+		t.Fatalf("realized output = %q, want gonix-dev", contents)
 	}
 }
 

@@ -3,6 +3,7 @@ package store
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/sund3RRR/gonix/internal/status"
 	"github.com/sund3RRR/gonix/nixcontext"
@@ -149,6 +150,46 @@ func (s *Store) Realise(path *storepath.Path) ([]Realization, error) {
 	}
 
 	return realizations, nil
+}
+
+// RealiseOutput builds or substitutes one named derivation output.
+//
+// The path is borrowed for the duration of the call. The returned realization
+// path is owned by the caller. Unlike Realise, RealiseOutput asks Nix to
+// realize only outputName.
+func (s *Store) RealiseOutput(path *storepath.Path, outputName string) (Realization, error) {
+	if s.ptr == nil {
+		return Realization{}, status.ErrClosed
+	}
+	if strings.TrimSpace(outputName) == "" {
+		return Realization{}, fmt.Errorf("store: output name must not be empty")
+	}
+
+	rawCtx, err := s.ctx.Borrow()
+	if err != nil {
+		return Realization{}, fmt.Errorf("store: failed to borrow context: %w", err)
+	}
+
+	pathPtr, err := path.Borrow()
+	if err != nil {
+		return Realization{}, fmt.Errorf("store: failed to borrow path: %w", err)
+	}
+
+	pathResult := raw.StoreRealiseOutput(rawCtx, s.ptr, pathPtr, outputName)
+	if pathResult == nil {
+		return Realization{}, fmt.Errorf("store: failed to realise output %q: %w", outputName, status.FromContext(rawCtx))
+	}
+
+	realizedPath, err := storepath.New(s.ctx, pathResult)
+	if err != nil {
+		raw.StorePathFree(pathResult)
+		return Realization{}, fmt.Errorf("store: failed to create output path %q: %w", outputName, err)
+	}
+
+	return Realization{
+		OutputName: outputName,
+		Path:       realizedPath,
+	}, nil
 }
 
 // Closure returns the filesystem closure for path.

@@ -2,8 +2,11 @@
 
 #include "nix_api_store_internal.h"
 #include "nix_api_util_internal.h"
+#include "nix/store/build-result.hh"
+#include "nix/store/derived-path.hh"
 #include "nix/store/gc-store.hh"
 #include "nix/store/local-fs-store.hh"
+#include "nix/store/outputs-spec.hh"
 #include "nix/store/store-cast.hh"
 
 #include <cstdlib>
@@ -11,6 +14,7 @@
 #include <filesystem>
 #include <memory>
 #include <new>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -235,4 +239,52 @@ extern "C" uint64_t go_nix_store_gc_results_bytes_freed(
 extern "C" void go_nix_store_gc_results_free(go_nix_store_gc_results *results)
 {
     delete results;
+}
+
+extern "C" StorePath *go_nix_store_realise_output(
+    nix_c_context *context,
+    Store *store,
+    StorePath *path,
+    const char *output_name
+)
+{
+    nix_clear_err(context);
+    try {
+        if (store == nullptr || path == nullptr || output_name == nullptr) {
+            throw nix::UsageError("store, store path, and output name must not be null");
+        }
+
+        path->path.requireDerivation();
+
+        nix::OutputName output_name_cpp(output_name);
+        std::set<nix::OutputName, std::less<>> selected_outputs{output_name_cpp};
+        nix::OutputsSpec outputs{
+            nix::OutputsSpec::Names{std::move(selected_outputs)}
+        };
+        nix::DerivedPath target{
+            nix::DerivedPath::Built{
+                nix::makeConstantStorePathRef(path->path),
+                std::move(outputs),
+            }
+        };
+
+        auto results = store->ptr->buildPathsWithResults({target}, nix::bmNormal, nullptr);
+        if (results.size() != 1) {
+            throw nix::Error("expected one build result, got %d", results.size());
+        }
+
+        auto *success = results[0].tryGetSuccess();
+        if (success == nullptr) {
+            results[0].tryThrowBuildError();
+            throw nix::Error("build failed without error details");
+        }
+
+        auto found = success->builtOutputs.find(output_name_cpp);
+        if (found == success->builtOutputs.end()) {
+            throw nix::Error("build result did not include requested output '%s'", output_name_cpp);
+        }
+
+        return new StorePath{found->second.outPath};
+    }
+    NIXC_CATCH_ERRS_NULL
 }

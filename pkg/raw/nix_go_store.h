@@ -158,6 +158,12 @@ go_nix_store_realise_results *go_nix_store_realise_to_array(
     Store *store,
     StorePath *path
 );
+StorePath *go_nix_store_realise_output(
+    nix_c_context *ctx,
+    Store *store,
+    StorePath *path,
+    const char *output_name
+);
 size_t go_nix_store_realise_results_count(const go_nix_store_realise_results *results);
 char *go_nix_store_realise_results_outname(
     const go_nix_store_realise_results *results,

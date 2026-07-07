@@ -252,25 +252,11 @@ func (c *Client) Realize(ctx context.Context, drvPath string) ([]RealizedOutput,
 		outputs := make([]RealizedOutput, 0, len(realizations))
 
 		for i := range realizations {
-			realizedPath := realizations[i].Path
-			if realizedPath == nil {
-				return fmt.Errorf("client: failed to realize derivation: realization %q has nil path", realizations[i].OutputName)
-			}
-
-			storePath := c.store.PrintPath(realizedPath.Hash(), realizedPath.Name())
-
-			realPath, err := c.store.RealPath(realizedPath)
+			output, err := c.realizedOutput(realizations[i])
 			if err != nil {
-				return fmt.Errorf("client: failed to realize derivation: real output path %q: %w", realizations[i].OutputName, err)
+				return fmt.Errorf("client: failed to realize derivation: %w", err)
 			}
-
-			outputs = append(outputs, RealizedOutput{
-				OutputName: realizations[i].OutputName,
-				StorePath:  storePath,
-				RealPath:   realPath,
-				Name:       realizedPath.Name(),
-				Hash:       realizedPath.Hash(),
-			})
+			outputs = append(outputs, output)
 		}
 
 		result = outputs
@@ -278,6 +264,59 @@ func (c *Client) Realize(ctx context.Context, drvPath string) ([]RealizedOutput,
 		return nil
 	})
 	return result, err
+}
+
+// RealizeOutput realizes one named output of the derivation at drvPath.
+//
+// RealizeOutput returns a pure Go DTO and closes the Nix store path handle
+// produced by Nix before returning. The Client's store must support
+// realization.
+func (c *Client) RealizeOutput(ctx context.Context, drvPath string, outputName string) (RealizedOutput, error) {
+	var result RealizedOutput
+	err := c.middleware(ctx, func() error {
+		drvStorePath, err := c.store.ParsePath(drvPath)
+		if err != nil {
+			return fmt.Errorf("client: failed to realize derivation output: parse drv path: %w", err)
+		}
+		defer drvStorePath.Close() //nolint:errcheck
+
+		realization, err := c.store.RealiseOutput(drvStorePath, outputName)
+		if err != nil {
+			return fmt.Errorf("client: failed to realize derivation output %q: %w", outputName, err)
+		}
+		defer realization.Close() //nolint:errcheck
+
+		output, err := c.realizedOutput(realization)
+		if err != nil {
+			return fmt.Errorf("client: failed to realize derivation output %q: %w", outputName, err)
+		}
+
+		result = output
+		return nil
+	})
+	return result, err
+}
+
+func (c *Client) realizedOutput(realization store.Realization) (RealizedOutput, error) {
+	realizedPath := realization.Path
+	if realizedPath == nil {
+		return RealizedOutput{}, fmt.Errorf("realization %q has nil path", realization.OutputName)
+	}
+
+	storePath := c.store.PrintPath(realizedPath.Hash(), realizedPath.Name())
+
+	realPath, err := c.store.RealPath(realizedPath)
+	if err != nil {
+		return RealizedOutput{}, fmt.Errorf("real output path %q: %w", realization.OutputName, err)
+	}
+
+	return RealizedOutput{
+		OutputName: realization.OutputName,
+		StorePath:  storePath,
+		RealPath:   realPath,
+		Name:       realizedPath.Name(),
+		Hash:       realizedPath.Hash(),
+	}, nil
 }
 
 // ProcessDaemonConnection processes separate input and output file descriptors.

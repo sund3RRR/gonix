@@ -150,8 +150,9 @@ ownership of only the final value to the caller. The value must be closed before
 its Client.
 
 `Client.Realize(ctx, drvPath)` builds or substitutes every output of a
-derivation path and
-returns Go-owned `RealizedOutput` values. Gonix intentionally leaves package
+derivation path and returns Go-owned `RealizedOutput` values.
+`Client.RealizeOutput(ctx, drvPath, outputName)` asks Nix for exactly one named
+output and returns the same DTO shape. Gonix intentionally leaves package
 discovery, package metadata normalization, indexing, and policy to higher-level
 package managers.
 
