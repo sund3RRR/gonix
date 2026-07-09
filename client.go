@@ -193,6 +193,29 @@ func (c *Client) GetFlakeOutputValue(ctx context.Context, f *flake.Flake, path [
 	return value, err
 }
 
+// EvalWithArgs evaluates expr as a function, applies args, and decodes its
+// result into out.
+//
+// Args may be nil, a boolean, string, integer, float, slice, or map with string
+// keys. Slices and maps may contain nested combinations of those types. The out
+// argument must be a non-nil pointer to a type supported by
+// eval.Evaluator.Unmarshal.
+func (c *Client) EvalWithArgs(ctx context.Context, expr string, args, out any) error {
+	return c.middleware(ctx, func() error {
+		result, err := c.evaluator.EvalWithArgs(expr, "<gonix>", args)
+		if err != nil {
+			return fmt.Errorf("client: failed to evaluate expression with argument: %w", err)
+		}
+		defer result.Close() //nolint:errcheck
+
+		if err := c.evaluator.Unmarshal(result, out); err != nil {
+			return fmt.Errorf("client: failed to decode expression result: %w", err)
+		}
+
+		return nil
+	})
+}
+
 // Eval evaluates expr and decodes its result into out.
 //
 // The out argument must be a non-nil pointer to a type supported by

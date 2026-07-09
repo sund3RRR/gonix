@@ -35,6 +35,38 @@ func (e *Evaluator) EvalString(expr, path string) (*Value, error) {
 	return value, nil
 }
 
+// EvalWithArgs evaluates expr as a function and applies arg.
+//
+// Arg may be nil, a boolean, string, integer, float, slice, or map with string
+// keys. Slices and maps may contain nested combinations of those types. The
+// path is used by Nix for diagnostics and relative path resolution. The
+// returned Value is owned by the caller and must be closed.
+func (e *Evaluator) EvalWithArgs(expr, path string, arg any) (*Value, error) {
+	fn, err := e.EvalString(expr, path)
+	if err != nil {
+		return nil, fmt.Errorf("eval: failed to evaluate function: %w", err)
+	}
+	defer fn.Close() //nolint:errcheck
+
+	goValue, err := goValueFromAny(arg, "$")
+	if err != nil {
+		return nil, fmt.Errorf("eval: failed to convert function argument: %w", err)
+	}
+
+	argValue, err := e.NewValue(goValue)
+	if err != nil {
+		return nil, fmt.Errorf("eval: failed to build function argument: %w", err)
+	}
+	defer argValue.Close() //nolint:errcheck
+
+	result, err := e.Call(fn, argValue)
+	if err != nil {
+		return nil, fmt.Errorf("eval: failed to call function: %w", err)
+	}
+
+	return result, nil
+}
+
 // NewValue creates a caller-owned Nix value from a typed GoValue.
 func (e *Evaluator) NewValue(gv GoValue) (*Value, error) {
 	if e.state == nil {

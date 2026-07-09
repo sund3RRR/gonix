@@ -71,6 +71,66 @@ func TestClientEvalCompositeValues(t *testing.T) {
 	}
 }
 
+func TestClientEvalWithArgs(t *testing.T) {
+	client := newEvalTestClient(t)
+
+	var result struct {
+		Message string `nix:"message"`
+		Total   int    `nix:"total"`
+	}
+	err := client.EvalWithArgs(
+		context.Background(),
+		`args: {
+			message = args.options.message;
+			total = builtins.foldl' (sum: item: sum + item) 0 args.values;
+		}`,
+		map[string]any{
+			"options": map[string]string{"message": "hello"},
+			"values":  []int{2, 3, 5},
+		},
+		&result,
+	)
+	if err != nil {
+		t.Fatalf("Client.EvalWithArgs() error = %v", err)
+	}
+	if result.Message != "hello" || result.Total != 10 {
+		t.Fatalf("Client.EvalWithArgs() result = %#v, want hello and 10", result)
+	}
+
+	var count int
+	if err := client.EvalWithArgs(context.Background(), "items: builtins.length items", []bool{true, false}, &count); err != nil {
+		t.Fatalf("Client.EvalWithArgs(slice) error = %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("Client.EvalWithArgs(slice) = %d, want 2", count)
+	}
+}
+
+func TestClientEvalWithArgsErrors(t *testing.T) {
+	client := newEvalTestClient(t)
+
+	var out int
+	err := client.EvalWithArgs(context.Background(), "x: x", struct{}{}, &out)
+	var typeErr *eval.UnsupportedTypeError
+	if !errors.As(err, &typeErr) {
+		t.Fatalf("Client.EvalWithArgs(unsupported) error = %v, want UnsupportedTypeError", err)
+	}
+
+	err = client.EvalWithArgs(context.Background(), "x: x", 1, out)
+	var targetErr *eval.InvalidUnmarshalError
+	if !errors.As(err, &targetErr) {
+		t.Fatalf("Client.EvalWithArgs(invalid out) error = %v, want InvalidUnmarshalError", err)
+	}
+
+	if err := client.Close(); err != nil {
+		t.Fatalf("Client.Close() error = %v", err)
+	}
+	err = client.EvalWithArgs(context.Background(), "x: x", 1, &out)
+	if !errors.Is(err, ErrClosed) {
+		t.Fatalf("Client.EvalWithArgs() after Close error = %v, want ErrClosed", err)
+	}
+}
+
 func TestClientEvalErrors(t *testing.T) {
 	client := newEvalTestClient(t)
 

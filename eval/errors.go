@@ -60,7 +60,8 @@ func (e *MissingAttrError) Error() string {
 	return fmt.Sprintf("eval: missing required attr %q at %s", e.Attr, e.Path)
 }
 
-// UnsupportedTypeError describes a Go type that Evaluator.Unmarshal cannot fill.
+// UnsupportedTypeError describes a Go type that an Evaluator cannot convert
+// to or from a Nix value.
 type UnsupportedTypeError struct {
 	Type reflect.Type
 	Path string
